@@ -98,7 +98,12 @@ extension ScanViewController: AVCaptureVideoDataOutputSampleBufferDelegate {
 
         let request = VNRecognizeTextRequest { [weak self] (request, error) in
             guard let results = request.results as? [VNRecognizedTextObservation], error == nil else { return }
-            let recognizedStrings = results.compactMap { $0.topCandidates(1).first?.string }
+            let recognizedStrings = results.compactMap { observation -> String? in
+                guard observation.confidence >= 0.8,
+                      let candidate = observation.topCandidates(1).first,
+                      candidate.confidence >= 0.8 else { return nil }
+                return candidate.string
+            }
             DispatchQueue.main.async {
                 recognizedStrings.forEach { self?.viewModel.processRecognizedText($0) }
             }
