@@ -74,6 +74,7 @@ final class ScanViewController: UIViewController {
                 let alert = UIAlertController(title: "Lookup Error", message: message, preferredStyle: .alert)
                 alert.addAction(UIAlertAction(title: "OK", style: .default))
                 self?.present(alert, animated: true)
+                self?.viewModel.errorMessage = nil
             }
             .store(in: &subscriptions)
     }
@@ -109,7 +110,9 @@ extension ScanViewController: AVCaptureVideoDataOutputSampleBufferDelegate {
         let request = VNRecognizeTextRequest { [weak self] (request, error) in
             guard let results = request.results as? [VNRecognizedTextObservation], error == nil else { return }
             let recognizedStrings = results.compactMap { $0.topCandidates(1).first?.string }
-            recognizedStrings.forEach { self?.viewModel.processRecognizedText($0) }
+            DispatchQueue.main.async {
+                recognizedStrings.forEach { self?.viewModel.processRecognizedText($0) }
+            }
         }
         request.recognitionLevel = .accurate
         request.recognitionLanguages = ["en-US"]

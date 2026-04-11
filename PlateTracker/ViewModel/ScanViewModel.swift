@@ -30,13 +30,20 @@ final class ScanViewModel {
         let detectedCountry = PlateValidator.detectCountry(plate: plate)
 
         guard detectedCountry != nil,
-              scanRecords.contains(where: { $0.plate == plate }) == false,
               let location = currentLocation else { return }
+
+        let countryCode = detectedCountry?.rawValue ?? "ES"
+
+        // Allow re-fetch if previous lookup failed (vehicleData is nil)
+        if let existingIndex = scanRecords.firstIndex(where: { $0.plate == plate }) {
+            if scanRecords[existingIndex].vehicleData == nil {
+                fetchInfo(for: plate, country: countryCode)
+            }
+            return
+        }
 
         let record = PlateScanRecord(plate: plate, location: location, timestamp: Date())
         scanRecords.append(record)
-
-        let countryCode = detectedCountry?.rawValue ?? "ES"
         fetchInfo(for: plate, country: countryCode)
     }
 

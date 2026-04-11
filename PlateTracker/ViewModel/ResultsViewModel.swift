@@ -17,7 +17,7 @@ final class ResultsViewModel {
     init(scanViewModel: ScanViewModel) {
         scanViewModel.$scanRecords
             .receive(on: RunLoop.main)
-            .assign(to: \.records, on: self)
+            .sink { [weak self] in self?.records = $0 }
             .store(in: &subscriptions)
     }
 }
