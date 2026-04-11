@@ -66,17 +66,6 @@ final class ScanViewController: UIViewController {
                 self?.plateLabel.text = "Plate: \(latest.plate)"
             }
             .store(in: &subscriptions)
-
-        viewModel.$errorMessage
-            .compactMap { $0 }
-            .receive(on: RunLoop.main)
-            .sink { [weak self] message in
-                let alert = UIAlertController(title: "Lookup Error", message: message, preferredStyle: .alert)
-                alert.addAction(UIAlertAction(title: "OK", style: .default))
-                self?.present(alert, animated: true)
-                self?.viewModel.errorMessage = nil
-            }
-            .store(in: &subscriptions)
     }
 
     private func setupCamera() {

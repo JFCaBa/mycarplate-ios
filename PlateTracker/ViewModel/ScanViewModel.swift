@@ -10,7 +10,6 @@ import CoreLocation
 final class ScanViewModel {
 
     @Published private(set) var scanRecords: [PlateScanRecord] = []
-    @Published var errorMessage: String?
 
     private let locationService = LocationService()
     private var currentLocation: CLLocationCoordinate2D?
@@ -34,30 +33,25 @@ final class ScanViewModel {
 
         let countryCode = detectedCountry?.rawValue ?? "ES"
 
-        // Allow re-fetch if previous lookup failed (vehicleData is nil)
-        if let existingIndex = scanRecords.firstIndex(where: { $0.plate == plate }) {
-            if scanRecords[existingIndex].vehicleData == nil {
-                fetchInfo(for: plate, country: countryCode)
-            }
-            return
-        }
+        // Skip if already found
+        if scanRecords.contains(where: { $0.plate == plate }) { return }
 
-        let record = PlateScanRecord(plate: plate, location: location, timestamp: Date())
-        scanRecords.append(record)
-        fetchInfo(for: plate, country: countryCode)
+        fetchInfo(for: plate, country: countryCode, location: location)
     }
 
-    private func fetchInfo(for plate: String, country: String) {
+    private func fetchInfo(for plate: String, country: String, location: CLLocationCoordinate2D) {
         NetworkService.shared.fetchVehicle(plate: plate, country: country)
             .receive(on: DispatchQueue.main)
-            .sink(receiveCompletion: { [weak self] completion in
-                if case .failure(let error) = completion {
-                    self?.errorMessage = error.localizedDescription
+            .sink(receiveCompletion: { _ in },
+                  receiveValue: { [weak self] vehicleData in
+                guard let self = self else { return }
+                if let index = self.scanRecords.firstIndex(where: { $0.plate == plate }) {
+                    self.scanRecords[index].vehicleData = vehicleData
+                } else {
+                    var record = PlateScanRecord(plate: plate, location: location, timestamp: Date())
+                    record.vehicleData = vehicleData
+                    self.scanRecords.append(record)
                 }
-            }, receiveValue: { [weak self] vehicleData in
-                guard let self = self,
-                      let index = self.scanRecords.firstIndex(where: { $0.plate == plate }) else { return }
-                self.scanRecords[index].vehicleData = vehicleData
             })
             .store(in: &subscriptions)
     }
