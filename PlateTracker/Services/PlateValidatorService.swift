@@ -14,20 +14,49 @@ enum PlateCountry: String, CaseIterable {
 
 final class PlateValidator {
 
+    // Mirrors api/src/providers/countryDetector.ts exactly
     private static let patterns: [PlateCountry: [String]] = [
         .spain: [
-            #"^[0-9]{4}\s?[A-Z]{3}$"#,
-            #"^[A-Z]{1,2}\s?[0-9]{4}\s?[A-Z]{0,3}$"#
-        ],
-        .uk: [
-            #"^[A-Z]{2}[0-9]{2}\s?[A-Z]{3}$"#
+            #"^\d{4}[BCDFGHJKLMNPRSTVWXYZ]{3}$"#,
+            #"^[A-Z]{1,2}\d{4}[A-Z]{1,2}$"#,
+            #"^[SPV]\d{4}[A-Z]{3}$"#,
+            #"^E\d{4}[A-Z]$"#,
+            #"^H\d{4}[A-Z]{3}$"#,
+            #"^H[A-Z]{1,2}\d{4}$"#,
+            #"^[A-Z]{1,2}\d{4}[A-Z]{3}$"#,
         ],
         .netherlands: [
-            #"^[A-Z0-9]{2,3}[-\s]?[A-Z0-9]{2,3}[-\s]?[A-Z0-9]{2,3}$"#
+            // With dashes (sidecodes 1-12)
+            #"^[A-Z]{2}-\d{2}-\d{2}$"#,
+            #"^\d{2}-\d{2}-[A-Z]{2}$"#,
+            #"^\d{2}-[A-Z]{2}-\d{2}$"#,
+            #"^[A-Z]{2}-[A-Z]{2}-\d{2}$"#,
+            #"^\d{2}-[A-Z]{2}-[A-Z]{2}$"#,
+            #"^[A-Z]{2}-\d{2}-[A-Z]{2}$"#,
+            #"^\d-[A-Z]{3}-\d{2}$"#,
+            #"^\d{2}-[A-Z]{3}-\d$"#,
+            #"^[A-Z]{2}-\d{3}-[A-Z]$"#,
+            #"^[A-Z]-\d{3}-[A-Z]{2}$"#,
+            #"^[A-Z]{3}-\d{2}-[A-Z]$"#,
+            #"^[A-Z]-\d{2}-[A-Z]{3}$"#,
+            // Without dashes
+            #"^[A-Z]{2}\d{4}$"#,
+            #"^\d{4}[A-Z]{2}$"#,
+            #"^[A-Z]{2}\d{2}[A-Z]{2}$"#,
+            #"^\d{2}[A-Z]{2}\d{2}$"#,
+            #"^\d[A-Z]{3}\d{2}$"#,
+            #"^\d{2}[A-Z]{3}\d$"#,
+            #"^[A-Z]{2}\d{3}[A-Z]$"#,
+            #"^[A-Z]\d{3}[A-Z]{2}$"#,
+            #"^[A-Z]{3}\d{2}[A-Z]$"#,
+            #"^[A-Z]\d{2}[A-Z]{3}$"#,
+        ],
+        .uk: [
+            #"^[A-Z]{2}\d{2}[A-Z]{3}$"#,
         ],
         .norway: [
-            #"^[A-Z]{2}\s?[0-9]{4,5}$"#
-        ]
+            #"^[A-Z]{2}\d{3,5}$"#,
+        ],
     ]
 
     static func isValid(plate: String, for country: PlateCountry) -> Bool {
