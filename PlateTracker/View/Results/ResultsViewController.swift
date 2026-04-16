@@ -9,13 +9,16 @@ import CoreLocation
 
 final class ResultsViewController: UIViewController {
 
-    private let tableView = UITableView()
+    private let tableView = UITableView(frame: .zero, style: .plain)
+    private let searchBar = UISearchBar()
     private var viewModel: ResultsViewModel!
+    private var scanViewModel: ScanViewModel!
     private var subscriptions = Set<AnyCancellable>()
 
     func configure(with scanViewModel: ScanViewModel) {
+        self.scanViewModel = scanViewModel
         viewModel = ResultsViewModel(scanViewModel: scanViewModel)
-        viewModel.$records
+        viewModel.$sections
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 self?.tableView.reloadData()
@@ -27,7 +30,14 @@ final class ResultsViewController: UIViewController {
         super.viewDidLoad()
         title = "Results"
         view.backgroundColor = .systemBackground
+        setupSearchBar()
         setupTableView()
+    }
+
+    private func setupSearchBar() {
+        searchBar.placeholder = "Search plates..."
+        searchBar.delegate = self
+        searchBar.searchBarStyle = .minimal
     }
 
     private func setupTableView() {
@@ -39,47 +49,58 @@ final class ResultsViewController: UIViewController {
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor)
         ])
-        tableView.register(UITableViewCell.self, forCellReuseIdentifier: "cell")
+        tableView.tableHeaderView = searchBar
+        searchBar.sizeToFit()
+        tableView.register(VehicleCell.self, forCellReuseIdentifier: VehicleCell.reuseIdentifier)
         tableView.dataSource = self
         tableView.delegate = self
+        tableView.keyboardDismissMode = .onDrag
     }
 }
 
+// MARK: - UISearchBarDelegate
+
+extension ResultsViewController: UISearchBarDelegate {
+    func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
+        viewModel.searchText = searchText
+    }
+
+    func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
+        searchBar.resignFirstResponder()
+    }
+}
+
+// MARK: - UITableViewDataSource
+
 extension ResultsViewController: UITableViewDataSource {
+    func numberOfSections(in tableView: UITableView) -> Int {
+        return viewModel?.sections.count ?? 0
+    }
+
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return viewModel?.records.count ?? 0
+        return viewModel.sections[section].records.count
+    }
+
+    func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
+        return viewModel.sections[section].title
     }
 
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let record = viewModel.records[indexPath.row]
-        let cell = UITableViewCell(style: .subtitle, reuseIdentifier: "cell")
-
-        if let data = record.vehicleData {
-            let makeModel = [data.make, data.model].compactMap { $0 }.joined(separator: " ")
-            cell.textLabel?.text = makeModel.isEmpty ? record.plate : "\(record.plate) — \(makeModel)"
-            let details = [
-                data.year.map { String($0) },
-                data.color,
-                data.fuelType
-            ].compactMap { $0 }.joined(separator: " | ")
-            cell.detailTextLabel?.text = details.isEmpty ? nil : details
-        } else {
-            cell.textLabel?.text = record.plate
-            cell.detailTextLabel?.text = "Loading..."
-        }
-
-        cell.accessoryType = .disclosureIndicator
+        let cell = tableView.dequeueReusableCell(withIdentifier: VehicleCell.reuseIdentifier, for: indexPath) as! VehicleCell
+        let record = viewModel.sections[indexPath.section].records[indexPath.row]
+        cell.configure(with: record)
         return cell
     }
 }
 
+// MARK: - UITableViewDelegate
+
 extension ResultsViewController: UITableViewDelegate {
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
-        let record = viewModel.records[indexPath.row]
-        guard let vehicleData = record.vehicleData else { return }
+        let record = viewModel.sections[indexPath.section].records[indexPath.row]
         let detailVC = VehicleDetailViewController()
-        detailVC.configure(with: vehicleData)
+        detailVC.configure(with: record.plate, scanViewModel: scanViewModel)
         navigationController?.pushViewController(detailVC, animated: true)
     }
 }
