@@ -12,6 +12,7 @@ enum NetworkError: Error, LocalizedError {
     case invalidResponse(statusCode: Int)
     case decodingFailed(Error)
     case apiError(String)
+    case rateLimited(retryAfterSeconds: Int)
 
     var errorDescription: String? {
         switch self {
@@ -25,6 +26,8 @@ enum NetworkError: Error, LocalizedError {
             return "Could not read server response"
         case .apiError(let message):
             return message
+        case .rateLimited(let seconds):
+            return "Rate limited — retry in \(seconds)s"
         }
     }
 }
@@ -33,6 +36,7 @@ final class NetworkService {
 
     static let shared = NetworkService()
     private let baseURL = "https://mycarplate.online"
+    private let apiKey = "pl_live_fb11d100809bcb313580bad4801bedd76ca8fc8559d654514e6f01126d50aa15"
 
     private init() {}
 
@@ -44,12 +48,20 @@ final class NetworkService {
             return Fail(error: NetworkError.invalidURL).eraseToAnyPublisher()
         }
 
-        return URLSession.shared.dataTaskPublisher(for: url)
+        var request = URLRequest(url: url)
+        request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+
+        return URLSession.shared.dataTaskPublisher(for: request)
             .tryMap { result -> Data in
                 guard let httpResponse = result.response as? HTTPURLResponse else {
                     throw NetworkError.invalidResponse(statusCode: 0)
                 }
+                print("[Network] \(plate) HTTP \(httpResponse.statusCode) (\(result.data.count) bytes)")
                 guard (200...299).contains(httpResponse.statusCode) else {
+                    if httpResponse.statusCode == 429 {
+                        let retryAfter = (try? JSONDecoder().decode(RateLimitResponse.self, from: result.data))?.retryAfterSeconds ?? 60
+                        throw NetworkError.rateLimited(retryAfterSeconds: retryAfter)
+                    }
                     if let apiResponse = try? JSONDecoder().decode(ApiResponse.self, from: result.data),
                        let errorMessage = apiResponse.error {
                         throw NetworkError.apiError(errorMessage)
@@ -58,18 +70,23 @@ final class NetworkService {
                 }
                 return result.data
             }
-            .decode(type: ApiResponse.self, decoder: JSONDecoder())
-            .tryMap { response -> VehicleData in
-                guard response.success, let data = response.data else {
+            .tryMap { data -> VehicleData in
+                let response: ApiResponse
+                do {
+                    response = try JSONDecoder().decode(ApiResponse.self, from: data)
+                } catch {
+                    let raw = String(data: data.prefix(500), encoding: .utf8) ?? "<binary>"
+                    print("[Network] ❌ Decode failed for \(plate): \(error)\nRaw: \(raw)")
+                    throw NetworkError.decodingFailed(error)
+                }
+                guard response.success, let vehicleData = response.data else {
                     throw NetworkError.apiError(response.error ?? "Vehicle not found")
                 }
-                return data
+                return vehicleData
             }
             .mapError { error in
                 if let networkError = error as? NetworkError {
                     return networkError
-                } else if let decodingError = error as? DecodingError {
-                    return NetworkError.decodingFailed(decodingError)
                 } else {
                     return NetworkError.requestFailed(error)
                 }

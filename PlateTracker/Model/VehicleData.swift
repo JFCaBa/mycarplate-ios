@@ -5,7 +5,7 @@
 
 import Foundation
 
-struct VehicleData: Decodable {
+struct VehicleData: Codable {
     let plate: String
     let country: String
     let make: String?
@@ -26,6 +26,16 @@ struct VehicleData: Decodable {
     let noiseLevel: String?
     let emissionClass: String?
     let netMaximumPower: String?
+    let taxStatus: String?
+    let taxDueDate: String?
+    let motStatus: String?
+    let motExpiryDate: String?
+    let firstRegistration: String?
+    let powerKw: Double?
+    let base7Code: String?
+    let weight: Int?
+    let vin: String?
+    let engineCode: String?
     let source: String?
     let confidence: Double?
 }
@@ -34,4 +44,8 @@ struct ApiResponse: Decodable {
     let success: Bool
     let data: VehicleData?
     let error: String?
+}
+
+struct RateLimitResponse: Decodable {
+    let retryAfterSeconds: Int
 }

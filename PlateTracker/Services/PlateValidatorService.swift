@@ -14,6 +14,23 @@ enum PlateCountry: String, CaseIterable {
 
 final class PlateValidator {
 
+    /// Strips OCR noise from the EU blue band (country codes, regional identifiers
+    /// like CAT, AND, PV, etc.) that Vision may read as part of the plate text.
+    /// Tries progressively shorter prefixes (up to 4 chars) — only strips when
+    /// the remainder is itself a valid plate.
+    static func cleanEUBandPrefix(_ raw: String) -> String {
+        // Try stripping 1 to 4 leading characters (covers "E", "ES", "CAT", "ECAT", etc.)
+        let maxStrip = min(4, raw.count - 4) // keep at least 4 chars for a valid plate
+        guard maxStrip > 0 else { return raw }
+        for length in (1...maxStrip).reversed() {
+            let stripped = String(raw.dropFirst(length))
+            if detectCountry(plate: stripped) != nil {
+                return stripped
+            }
+        }
+        return raw
+    }
+
     // Mirrors api/src/providers/countryDetector.ts exactly
     private static let patterns: [PlateCountry: [String]] = [
         .spain: [

@@ -28,6 +28,47 @@ final class ScanViewController: UIViewController {
         return label
     }()
 
+    private let loadingOverlay: UIView = {
+        let overlay = UIView()
+        overlay.backgroundColor = UIColor.black.withAlphaComponent(0.5)
+        overlay.isHidden = true
+
+        let blur = UIVisualEffectView(effect: UIBlurEffect(style: .dark))
+        blur.translatesAutoresizingMaskIntoConstraints = false
+        blur.layer.cornerRadius = 16
+        blur.clipsToBounds = true
+        overlay.addSubview(blur)
+
+        let spinner = UIActivityIndicatorView(style: .large)
+        spinner.color = .white
+        spinner.startAnimating()
+        spinner.translatesAutoresizingMaskIntoConstraints = false
+
+        let label = UILabel()
+        label.text = "Looking up plate..."
+        label.textColor = .white
+        label.font = .systemFont(ofSize: 16, weight: .medium)
+        label.translatesAutoresizingMaskIntoConstraints = false
+
+        let stack = UIStackView(arrangedSubviews: [spinner, label])
+        stack.axis = .vertical
+        stack.alignment = .center
+        stack.spacing = 12
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        overlay.addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            stack.centerXAnchor.constraint(equalTo: overlay.centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: overlay.centerYAnchor),
+            blur.centerXAnchor.constraint(equalTo: overlay.centerXAnchor),
+            blur.centerYAnchor.constraint(equalTo: overlay.centerYAnchor),
+            blur.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: 48),
+            blur.heightAnchor.constraint(equalTo: stack.heightAnchor, constant: 32),
+        ])
+
+        return overlay
+    }()
+
     func configure(with viewModel: ScanViewModel) {
         self.viewModel = viewModel
     }
@@ -56,14 +97,40 @@ final class ScanViewController: UIViewController {
             plateLabel.widthAnchor.constraint(equalToConstant: 250),
             plateLabel.heightAnchor.constraint(equalToConstant: 50)
         ])
+
+        view.addSubview(loadingOverlay)
+        loadingOverlay.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            loadingOverlay.topAnchor.constraint(equalTo: view.topAnchor),
+            loadingOverlay.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            loadingOverlay.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            loadingOverlay.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ])
     }
 
     private func bindViewModel() {
-        viewModel.$scanRecords
+        viewModel.$detectedPlate
             .receive(on: RunLoop.main)
-            .sink { [weak self] records in
-                guard let latest = records.last else { return }
-                self?.plateLabel.text = "Plate: \(latest.plate)"
+            .sink { [weak self] plate in
+                guard let plate = plate else { return }
+                self?.plateLabel.text = "Plate: \(plate)"
+                self?.plateLabel.backgroundColor = UIColor.black.withAlphaComponent(0.6)
+            }
+            .store(in: &subscriptions)
+
+        viewModel.$isFetching
+            .receive(on: RunLoop.main)
+            .sink { [weak self] fetching in
+                self?.loadingOverlay.isHidden = !fetching
+            }
+            .store(in: &subscriptions)
+
+        viewModel.$lastError
+            .receive(on: RunLoop.main)
+            .sink { [weak self] error in
+                guard let error = error else { return }
+                self?.plateLabel.text = error
+                self?.plateLabel.backgroundColor = UIColor.red.withAlphaComponent(0.6)
             }
             .store(in: &subscriptions)
     }
@@ -81,6 +148,10 @@ final class ScanViewController: UIViewController {
         videoOutput.setSampleBufferDelegate(self, queue: DispatchQueue(label: "videoQueue"))
         captureSession.addOutput(videoOutput)
 
+        if let connection = videoOutput.connection(with: .video) {
+            connection.videoRotationAngle = 90
+        }
+
         previewLayer = AVCaptureVideoPreviewLayer(session: captureSession)
         previewLayer.frame = view.layer.bounds
         previewLayer.videoGravity = .resizeAspectFill
@@ -94,18 +165,51 @@ final class ScanViewController: UIViewController {
 
 extension ScanViewController: AVCaptureVideoDataOutputSampleBufferDelegate {
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        guard !viewModel.isFetching,
+              let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
 
         let request = VNRecognizeTextRequest { [weak self] (request, error) in
-            guard let results = request.results as? [VNRecognizedTextObservation], error == nil else { return }
+            if let error = error {
+                print("[Scan] Vision error: \(error.localizedDescription)")
+                return
+            }
+            guard let results = request.results as? [VNRecognizedTextObservation] else {
+                print("[Scan] Vision returned no results")
+                return
+            }
+            if !results.isEmpty {
+                print("[Scan] Vision found \(results.count) text observation(s)")
+                for (i, obs) in results.enumerated() {
+                    let top = obs.topCandidates(3).map { "\($0.string) (\(String(format: "%.2f", $0.confidence)))" }
+                    print("[Scan]   #\(i) obsConf=\(String(format: "%.2f", obs.confidence)) candidates=\(top)")
+                }
+            }
             let recognizedStrings = results.compactMap { observation -> String? in
                 guard observation.confidence >= 0.8,
                       let candidate = observation.topCandidates(1).first,
                       candidate.confidence >= 0.8 else { return nil }
                 return candidate.string
             }
+            if recognizedStrings.isEmpty {
+                // Only log occasionally to avoid flooding
+                return
+            }
+            print("[Scan] Passed confidence filter: \(recognizedStrings)")
+
+            // Capture the frame that contained the plate
+            let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+            let context = CIContext()
+            let frame: UIImage?
+            if let cgImage = context.createCGImage(ciImage, from: ciImage.extent) {
+                frame = UIImage(cgImage: cgImage)
+            } else {
+                frame = nil
+            }
+
             DispatchQueue.main.async {
-                recognizedStrings.forEach { self?.viewModel.processRecognizedText($0) }
+                recognizedStrings.forEach {
+                    self?.viewModel.processRecognizedText($0, capturedFrame: frame)
+                }
             }
         }
         request.recognitionLevel = .accurate
@@ -113,6 +217,10 @@ extension ScanViewController: AVCaptureVideoDataOutputSampleBufferDelegate {
         request.usesLanguageCorrection = false
 
         let requestHandler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, options: [:])
-        try? requestHandler.perform([request])
+        do {
+            try requestHandler.perform([request])
+        } catch {
+            print("[Scan] VNImageRequestHandler failed: \(error.localizedDescription)")
+        }
     }
 }
