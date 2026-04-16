@@ -31,6 +31,19 @@ final class PlateValidator {
         return raw
     }
 
+    /// Country-specific variant: only strips if the remainder is valid for the given country.
+    static func cleanEUBandPrefix(_ raw: String, for country: PlateCountry) -> String {
+        let maxStrip = min(4, raw.count - 4)
+        guard maxStrip > 0 else { return raw }
+        for length in (1...maxStrip).reversed() {
+            let stripped = String(raw.dropFirst(length))
+            if isValid(plate: stripped, for: country) {
+                return stripped
+            }
+        }
+        return raw
+    }
+
     // Mirrors api/src/providers/countryDetector.ts exactly
     private static let patterns: [PlateCountry: [String]] = [
         .spain: [
