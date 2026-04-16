@@ -32,6 +32,34 @@ final class ResultsViewController: UIViewController {
         view.backgroundColor = .systemBackground
         setupSearchBar()
         setupTableView()
+
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(showFullImage(_:)),
+            name: .vehicleCellImageTapped, object: nil
+        )
+    }
+
+    @objc private func showFullImage(_ notification: Notification) {
+        guard let image = notification.object as? UIImage else { return }
+        let imageView = UIImageView(image: image)
+        imageView.contentMode = .scaleAspectFit
+        imageView.backgroundColor = .black
+        imageView.isUserInteractionEnabled = true
+        imageView.frame = view.window?.bounds ?? view.bounds
+
+        let tap = UITapGestureRecognizer(target: self, action: #selector(dismissFullImage(_:)))
+        imageView.addGestureRecognizer(tap)
+
+        imageView.alpha = 0
+        view.window?.addSubview(imageView)
+        UIView.animate(withDuration: 0.25) { imageView.alpha = 1 }
+    }
+
+    @objc private func dismissFullImage(_ gesture: UITapGestureRecognizer) {
+        guard let imageView = gesture.view else { return }
+        UIView.animate(withDuration: 0.25, animations: { imageView.alpha = 0 }) { _ in
+            imageView.removeFromSuperview()
+        }
     }
 
     private func setupSearchBar() {

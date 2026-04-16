@@ -44,19 +44,28 @@ final class MapViewController: UIViewController {
     private func updateMapAnnotations(_ records: [PlateScanRecord]) {
         mapView.removeAnnotations(mapView.annotations)
 
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+
+        var lastCoordinate: CLLocationCoordinate2D?
+
         records.forEach { record in
-            let annotation = MKPointAnnotation()
-            annotation.coordinate = record.location
-            annotation.title = record.plate
-            let formatter = DateFormatter()
-            formatter.dateStyle = .short
-            formatter.timeStyle = .short
-            annotation.subtitle = formatter.string(from: record.timestamp)
-            mapView.addAnnotation(annotation)
+            record.sightings.forEach { sighting in
+                let annotation = MKPointAnnotation()
+                annotation.coordinate = sighting.location.clCoordinate
+                annotation.title = record.plate
+                annotation.subtitle = formatter.string(from: sighting.date)
+                mapView.addAnnotation(annotation)
+                lastCoordinate = sighting.location.clCoordinate
+            }
         }
 
-        if let last = records.last {
-            let region = MKCoordinateRegion(center: last.location, span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05))
+        if let center = lastCoordinate {
+            let region = MKCoordinateRegion(
+                center: center,
+                span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+            )
             mapView.setRegion(region, animated: true)
         }
     }

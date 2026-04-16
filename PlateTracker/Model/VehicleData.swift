@@ -38,6 +38,7 @@ struct VehicleData: Codable {
     let engineCode: String?
     let source: String?
     let confidence: Double?
+    let immoPin: String?
 }
 
 struct ApiResponse: Decodable {

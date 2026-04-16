@@ -37,10 +37,15 @@ final class MainTabBarController: UITabBarController {
         mapVC.configure(with: scanViewModel)
         mapVC.tabBarItem = UITabBarItem(title: "Map", image: UIImage(systemName: "map"), tag: 2)
 
+        let settingsVC = SettingsViewController()
+        settingsVC.configure(with: scanViewModel)
+        settingsVC.tabBarItem = UITabBarItem(title: "Settings", image: UIImage(systemName: "gearshape"), tag: 3)
+
         viewControllers = [
             UINavigationController(rootViewController: scanVC),
             UINavigationController(rootViewController: resultsVC),
-            UINavigationController(rootViewController: mapVC)
+            UINavigationController(rootViewController: mapVC),
+            UINavigationController(rootViewController: settingsVC)
         ]
     }
 }

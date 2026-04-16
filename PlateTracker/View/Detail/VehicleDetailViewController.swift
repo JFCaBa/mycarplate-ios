@@ -4,29 +4,67 @@
 //
 
 import UIKit
+import Combine
 
 final class VehicleDetailViewController: UIViewController {
 
     private let tableView = UITableView(frame: .zero, style: .insetGrouped)
     private var viewModel: VehicleDetailViewModel!
+    private var subscriptions = Set<AnyCancellable>()
 
-    private static let countryFlags: [String: String] = [
-        "ES": "\u{1F1EA}\u{1F1F8}",
-        "UK": "\u{1F1EC}\u{1F1E7}",
-        "NL": "\u{1F1F3}\u{1F1F1}",
-        "NO": "\u{1F1F3}\u{1F1F4}"
-    ]
+    private let heroImageView: UIImageView = {
+        let iv = UIImageView()
+        iv.contentMode = .scaleAspectFill
+        iv.clipsToBounds = true
+        iv.backgroundColor = .secondarySystemBackground
+        iv.tintColor = .secondaryLabel
+        return iv
+    }()
 
-    func configure(with vehicleData: VehicleData) {
-        self.viewModel = VehicleDetailViewModel(vehicleData: vehicleData)
+    private let refreshButton = UIBarButtonItem(
+        systemItem: .refresh
+    )
+
+    func configure(with plate: String, scanViewModel: ScanViewModel) {
+        self.viewModel = VehicleDetailViewModel(plate: plate, scanViewModel: scanViewModel)
     }
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        let flag = Self.countryFlags[viewModel.country] ?? ""
-        title = "\(flag) \(viewModel.plate)"
+        title = viewModel.navigationTitle
         view.backgroundColor = .systemBackground
+
+        setupRefreshButton()
+        setupHeroImage()
         setupTableView()
+        bindViewModel()
+    }
+
+    private func setupRefreshButton() {
+        refreshButton.target = self
+        refreshButton.action = #selector(refreshTapped)
+        navigationItem.rightBarButtonItem = refreshButton
+    }
+
+    private func setupHeroImage() {
+        if let photoName = viewModel.latestPhotoFileName,
+           let image = StorageService.shared.loadPhoto(fileName: photoName) {
+            heroImageView.image = image
+        } else {
+            heroImageView.image = UIImage(systemName: "car.fill")
+            heroImageView.contentMode = .scaleAspectFit
+        }
+
+        let headerView = UIView(frame: CGRect(x: 0, y: 0, width: view.bounds.width, height: 200))
+        headerView.addSubview(heroImageView)
+        heroImageView.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            heroImageView.topAnchor.constraint(equalTo: headerView.topAnchor),
+            heroImageView.bottomAnchor.constraint(equalTo: headerView.bottomAnchor),
+            heroImageView.leadingAnchor.constraint(equalTo: headerView.leadingAnchor),
+            heroImageView.trailingAnchor.constraint(equalTo: headerView.trailingAnchor),
+        ])
+        tableView.tableHeaderView = headerView
     }
 
     private func setupTableView() {
@@ -39,6 +77,30 @@ final class VehicleDetailViewController: UIViewController {
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor)
         ])
         tableView.dataSource = self
+    }
+
+    private func bindViewModel() {
+        viewModel.$sections
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.tableView.reloadData() }
+            .store(in: &subscriptions)
+
+        viewModel.$isRefreshing
+            .receive(on: RunLoop.main)
+            .sink { [weak self] refreshing in
+                if refreshing {
+                    let spinner = UIActivityIndicatorView(style: .medium)
+                    spinner.startAnimating()
+                    self?.navigationItem.rightBarButtonItem = UIBarButtonItem(customView: spinner)
+                } else {
+                    self?.navigationItem.rightBarButtonItem = self?.refreshButton
+                }
+            }
+            .store(in: &subscriptions)
+    }
+
+    @objc private func refreshTapped() {
+        viewModel.refresh()
     }
 }
 
