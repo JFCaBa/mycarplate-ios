@@ -19,6 +19,16 @@ final class ScanViewModel {
     private var subscriptions = Set<AnyCancellable>()
     private var cooldownPlates: [String: Date] = [:]
 
+    private var selectedCountry: PlateCountry {
+        let raw = UserDefaults.standard.string(forKey: "selectedCountry") ?? "ES"
+        return PlateCountry(rawValue: raw) ?? .spain
+    }
+
+    private var isLookupEnabled: Bool {
+        if UserDefaults.standard.object(forKey: "lookupEnabled") == nil { return true }
+        return UserDefaults.standard.bool(forKey: "lookupEnabled")
+    }
+
     init() {
         scanRecords = StorageService.shared.loadRecords()
 
@@ -35,15 +45,15 @@ final class ScanViewModel {
     /// `capturedFrame` is the camera image at detection time.
     func processRecognizedText(_ text: String, capturedFrame: UIImage?) {
         let raw = text.replacingOccurrences(of: " ", with: "").uppercased()
-        let plate = PlateValidator.cleanEUBandPrefix(raw)
+        let country = selectedCountry
+        let plate = PlateValidator.cleanEUBandPrefix(raw, for: country)
 
-        print("[ScanVM] raw=\(raw) plate=\(plate) isSpanish=\(PlateValidator.isValid(plate: plate, for: .spain)) hasLocation=\(currentLocation != nil)")
+        print("[ScanVM] raw=\(raw) plate=\(plate) country=\(country.rawValue) valid=\(PlateValidator.isValid(plate: plate, for: country)) hasLocation=\(currentLocation != nil)")
 
-        // Only accept Spanish plates — reject partial reads that match other countries
-        guard PlateValidator.isValid(plate: plate, for: .spain),
+        guard PlateValidator.isValid(plate: plate, for: country),
               let location = currentLocation else {
-            if !PlateValidator.isValid(plate: plate, for: .spain) {
-                print("[ScanVM] ❌ Not a valid Spanish plate: '\(plate)'")
+            if !PlateValidator.isValid(plate: plate, for: country) {
+                print("[ScanVM] ❌ Not a valid \(country.rawValue) plate: '\(plate)'")
             }
             if currentLocation == nil {
                 print("[ScanVM] ❌ No GPS location available yet")
@@ -51,7 +61,7 @@ final class ScanViewModel {
             return
         }
 
-        let countryCode = "ES"
+        let countryCode = country.rawValue
 
         // Show detected plate immediately (before API call)
         detectedPlate = plate
@@ -78,7 +88,25 @@ final class ScanViewModel {
         }
         cooldownPlates = cooldownPlates.filter { Date() < $0.value }
 
-        // New plate — call API; only persist on success
+        // Plate-only mode — store without API call
+        if !isLookupEnabled {
+            let photoFileName = saveFrameIfNeeded(capturedFrame, plate: plate)
+            let sighting = Sighting(
+                location: CodableCoordinate(location),
+                date: Date(),
+                photoFileName: photoFileName
+            )
+            let record = PlateScanRecord(
+                plate: plate,
+                vehicleData: nil,
+                sightings: [sighting]
+            )
+            scanRecords.append(record)
+            StorageService.shared.saveRecords(scanRecords)
+            return
+        }
+
+        // Lookup mode — call API
         fetchAndStore(plate: plate, country: countryCode, location: location, capturedFrame: capturedFrame)
     }
 
