@@ -14,6 +14,7 @@ final class ScanViewModel {
     @Published private(set) var detectedPlate: String?
     @Published private(set) var lastError: String?
 
+    private static let minSightingDistanceMeters: CLLocationDistance = 25
     private let locationService = LocationService()
     private var currentLocation: CLLocationCoordinate2D?
     private var subscriptions = Set<AnyCancellable>()
@@ -66,8 +67,31 @@ final class ScanViewModel {
         // Show detected plate immediately (before API call)
         detectedPlate = plate
 
-        // Existing plate — just add a new sighting, no API call
+        // Existing plate — append a new sighting, or just refresh the last one
+        // if we're within Self.minSightingDistanceMeters of it (stationary device
+        // or same-car re-scan). Avoids piling up near-duplicate sightings.
         if let index = scanRecords.firstIndex(where: { $0.plate == plate }) {
+            if let last = scanRecords[index].sightings.last {
+                let lastCL = CLLocation(
+                    latitude: last.location.latitude,
+                    longitude: last.location.longitude
+                )
+                let newCL = CLLocation(
+                    latitude: location.latitude,
+                    longitude: location.longitude
+                )
+                if lastCL.distance(from: newCL) < Self.minSightingDistanceMeters {
+                    let refreshed = Sighting(
+                        location: last.location,
+                        date: Date(),
+                        photoFileName: last.photoFileName
+                    )
+                    let lastIdx = scanRecords[index].sightings.count - 1
+                    scanRecords[index].sightings[lastIdx] = refreshed
+                    StorageService.shared.saveRecords(scanRecords)
+                    return
+                }
+            }
             let photoFileName = saveFrameIfNeeded(capturedFrame, plate: plate)
             let sighting = Sighting(
                 location: CodableCoordinate(location),
