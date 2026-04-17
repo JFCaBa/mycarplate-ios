@@ -28,6 +28,8 @@ final class ScanViewController: UIViewController {
         return label
     }()
 
+    private let queuePanel = QueuePanelView()
+
     func configure(with viewModel: ScanViewModel) {
         self.viewModel = viewModel
     }
@@ -39,6 +41,7 @@ final class ScanViewController: UIViewController {
 
         setupCamera()
         setupPlateLabel()
+        setupQueuePanel()
         bindViewModel()
     }
 
@@ -58,6 +61,27 @@ final class ScanViewController: UIViewController {
         ])
     }
 
+    private func setupQueuePanel() {
+        queuePanel.translatesAutoresizingMaskIntoConstraints = false
+        queuePanel.isHidden = true
+        view.addSubview(queuePanel)
+        NSLayoutConstraint.activate([
+            queuePanel.widthAnchor.constraint(equalTo: view.widthAnchor, multiplier: 0.33),
+            queuePanel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16),
+            queuePanel.bottomAnchor.constraint(equalTo: plateLabel.topAnchor, constant: -16),
+            queuePanel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -8),
+        ])
+
+        queuePanel.onDeleteRequested = { [weak self] plate in
+            guard let self = self else { return }
+            if let item = self.viewModel.lookupQueue.items.first(where: { $0.plate == plate }),
+               let fileName = item.capturedFrameFileName {
+                StorageService.shared.deletePhoto(fileName: fileName)
+            }
+            self.viewModel.lookupQueue.remove(plate: plate)
+        }
+    }
+
     private func bindViewModel() {
         viewModel.$detectedPlate
             .receive(on: RunLoop.main)
@@ -74,6 +98,20 @@ final class ScanViewController: UIViewController {
                 guard let error = error else { return }
                 self?.plateLabel.text = error
                 self?.plateLabel.backgroundColor = UIColor.red.withAlphaComponent(0.6)
+            }
+            .store(in: &subscriptions)
+
+        viewModel.lookupQueue.$items
+            .receive(on: RunLoop.main)
+            .sink { [weak self] items in
+                guard let self = self else { return }
+                self.queuePanel.update(items: items)
+                let shouldShow = !items.isEmpty
+                if self.queuePanel.isHidden != !shouldShow {
+                    UIView.animate(withDuration: 0.2) {
+                        self.queuePanel.isHidden = !shouldShow
+                    }
+                }
             }
             .store(in: &subscriptions)
     }
