@@ -16,6 +16,7 @@ struct DetailSection {
     let rows: [DetailRow]
 }
 
+@MainActor
 final class VehicleDetailViewModel {
 
     @Published private(set) var sections: [DetailSection] = []
