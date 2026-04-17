@@ -74,11 +74,13 @@ final class ScanViewController: UIViewController {
 
         queuePanel.onDeleteRequested = { [weak self] plate in
             guard let self = self else { return }
-            if let item = self.viewModel.lookupQueue.items.first(where: { $0.plate == plate }),
-               let fileName = item.capturedFrameFileName {
+            let fileName = self.viewModel.lookupQueue.items
+                .first(where: { $0.plate == plate })?
+                .capturedFrameFileName
+            let didRemove = self.viewModel.lookupQueue.remove(plate: plate)
+            if didRemove, let fileName = fileName {
                 StorageService.shared.deletePhoto(fileName: fileName)
             }
-            self.viewModel.lookupQueue.remove(plate: plate)
         }
     }
 

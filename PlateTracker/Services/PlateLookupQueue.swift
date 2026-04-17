@@ -42,12 +42,16 @@ final class PlateLookupQueue {
         return true
     }
 
-    /// Remove a pending item (user-driven deletion). No-op on `.processing`
-    /// items — the UI does not expose delete on the active row.
-    func remove(plate: String) {
-        guard let idx = items.firstIndex(where: { $0.plate == plate }) else { return }
-        guard items[idx].state == .pending else { return }
+    /// Remove a pending item (user-driven deletion). Returns `true` if an
+    /// item was removed; `false` if the plate is not in the queue or is
+    /// currently `.processing` (the UI does not expose delete on the active
+    /// row, but belt-and-suspenders).
+    @discardableResult
+    func remove(plate: String) -> Bool {
+        guard let idx = items.firstIndex(where: { $0.plate == plate }) else { return false }
+        guard items[idx].state == .pending else { return false }
         items.remove(at: idx)
+        return true
     }
 
     /// Called on app termination. Cancels the in-flight subscription and

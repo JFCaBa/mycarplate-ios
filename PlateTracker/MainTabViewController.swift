@@ -5,6 +5,7 @@
 
 import UIKit
 
+@MainActor
 final class MainTabBarController: UITabBarController {
 
     private let scanViewModel = ScanViewModel()
