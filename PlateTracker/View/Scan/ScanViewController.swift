@@ -28,47 +28,6 @@ final class ScanViewController: UIViewController {
         return label
     }()
 
-    private let loadingOverlay: UIView = {
-        let overlay = UIView()
-        overlay.backgroundColor = UIColor.black.withAlphaComponent(0.5)
-        overlay.isHidden = true
-
-        let blur = UIVisualEffectView(effect: UIBlurEffect(style: .dark))
-        blur.translatesAutoresizingMaskIntoConstraints = false
-        blur.layer.cornerRadius = 16
-        blur.clipsToBounds = true
-        overlay.addSubview(blur)
-
-        let spinner = UIActivityIndicatorView(style: .large)
-        spinner.color = .white
-        spinner.startAnimating()
-        spinner.translatesAutoresizingMaskIntoConstraints = false
-
-        let label = UILabel()
-        label.text = "Looking up plate..."
-        label.textColor = .white
-        label.font = .systemFont(ofSize: 16, weight: .medium)
-        label.translatesAutoresizingMaskIntoConstraints = false
-
-        let stack = UIStackView(arrangedSubviews: [spinner, label])
-        stack.axis = .vertical
-        stack.alignment = .center
-        stack.spacing = 12
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        overlay.addSubview(stack)
-
-        NSLayoutConstraint.activate([
-            stack.centerXAnchor.constraint(equalTo: overlay.centerXAnchor),
-            stack.centerYAnchor.constraint(equalTo: overlay.centerYAnchor),
-            blur.centerXAnchor.constraint(equalTo: overlay.centerXAnchor),
-            blur.centerYAnchor.constraint(equalTo: overlay.centerYAnchor),
-            blur.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: 48),
-            blur.heightAnchor.constraint(equalTo: stack.heightAnchor, constant: 32),
-        ])
-
-        return overlay
-    }()
-
     func configure(with viewModel: ScanViewModel) {
         self.viewModel = viewModel
     }
@@ -97,15 +56,6 @@ final class ScanViewController: UIViewController {
             plateLabel.widthAnchor.constraint(equalToConstant: 250),
             plateLabel.heightAnchor.constraint(equalToConstant: 50)
         ])
-
-        view.addSubview(loadingOverlay)
-        loadingOverlay.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            loadingOverlay.topAnchor.constraint(equalTo: view.topAnchor),
-            loadingOverlay.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            loadingOverlay.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            loadingOverlay.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-        ])
     }
 
     private func bindViewModel() {
@@ -115,13 +65,6 @@ final class ScanViewController: UIViewController {
                 guard let plate = plate else { return }
                 self?.plateLabel.text = "Plate: \(plate)"
                 self?.plateLabel.backgroundColor = UIColor.black.withAlphaComponent(0.6)
-            }
-            .store(in: &subscriptions)
-
-        viewModel.$isFetching
-            .receive(on: RunLoop.main)
-            .sink { [weak self] fetching in
-                self?.loadingOverlay.isHidden = !fetching
             }
             .store(in: &subscriptions)
 
@@ -165,8 +108,7 @@ final class ScanViewController: UIViewController {
 
 extension ScanViewController: AVCaptureVideoDataOutputSampleBufferDelegate {
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        guard !viewModel.isFetching,
-              let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
 
         let request = VNRecognizeTextRequest { [weak self] (request, error) in
             if let error = error {
