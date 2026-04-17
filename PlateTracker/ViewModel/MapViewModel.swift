@@ -9,6 +9,7 @@ import Foundation
 import Combine
 import CoreLocation
 
+@MainActor
 final class MapViewModel {
     
     @Published private(set) var records: [PlateScanRecord] = []

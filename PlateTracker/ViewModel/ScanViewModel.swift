@@ -7,14 +7,17 @@ import UIKit
 import Combine
 import CoreLocation
 
+@MainActor
 final class ScanViewModel {
 
+    private static let minSightingDistanceMeters: CLLocationDistance = 25
+
     @Published private(set) var scanRecords: [PlateScanRecord] = []
-    @Published private(set) var isFetching = false
     @Published private(set) var detectedPlate: String?
     @Published private(set) var lastError: String?
 
-    private static let minSightingDistanceMeters: CLLocationDistance = 25
+    let lookupQueue: PlateLookupQueue
+
     private let locationService = LocationService()
     private var currentLocation: CLLocationCoordinate2D?
     private var subscriptions = Set<AnyCancellable>()
@@ -31,19 +34,42 @@ final class ScanViewModel {
     }
 
     init() {
-        scanRecords = StorageService.shared.loadRecords()
+        self.lookupQueue = PlateLookupQueue(fetcher: NetworkService.shared)
+        self.scanRecords = StorageService.shared.loadRecords()
+
+        lookupQueue.setCompletionHandler { [weak self] item, outcome in
+            guard let self = self else { return }
+            switch outcome {
+            case .success(let vehicleData):
+                self.storeRecord(for: item, vehicleData: vehicleData)
+            case .failure, .cancelled:
+                self.storeRecord(for: item, vehicleData: nil)
+            case .rateLimited(let retryAfter):
+                self.cooldownPlates[item.plate] = Date().addingTimeInterval(TimeInterval(retryAfter))
+                self.storeRecord(for: item, vehicleData: nil)
+            }
+        }
 
         locationService.currentLocationPublisher
             .sink { [weak self] location in
                 self?.currentLocation = location
             }
             .store(in: &subscriptions)
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleWillTerminate),
+            name: UIApplication.willTerminateNotification,
+            object: nil
+        )
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
 
     // MARK: - Scan flow
 
-    /// Called by ScanViewController when OCR detects text.
-    /// `capturedFrame` is the camera image at detection time.
     func processRecognizedText(_ text: String, capturedFrame: UIImage?) {
         let raw = text.replacingOccurrences(of: " ", with: "").uppercased()
         let country = selectedCountry
@@ -64,7 +90,7 @@ final class ScanViewModel {
 
         let countryCode = country.rawValue
 
-        // Show detected plate immediately (before API call)
+        // Show detected plate immediately.
         detectedPlate = plate
 
         // Existing plate — append a new sighting, or just refresh the last one
@@ -103,35 +129,35 @@ final class ScanViewModel {
             return
         }
 
-        // Skip if already fetching
-        guard !isFetching else { return }
-
-        // Skip if plate was recently rate-limited
+        // Skip if plate was recently rate-limited — write plate-only and skip API.
         if let cooldownUntil = cooldownPlates[plate], Date() < cooldownUntil {
+            storePlateOnly(plate: plate, location: location, capturedFrame: capturedFrame)
             return
         }
         cooldownPlates = cooldownPlates.filter { Date() < $0.value }
 
-        // Plate-only mode — store without API call
+        // Plate-only mode — store without API call.
         if !isLookupEnabled {
-            let photoFileName = saveFrameIfNeeded(capturedFrame, plate: plate)
-            let sighting = Sighting(
-                location: CodableCoordinate(location),
-                date: Date(),
-                photoFileName: photoFileName
-            )
-            let record = PlateScanRecord(
-                plate: plate,
-                vehicleData: nil,
-                sightings: [sighting]
-            )
-            scanRecords.append(record)
-            StorageService.shared.saveRecords(scanRecords)
+            storePlateOnly(plate: plate, location: location, capturedFrame: capturedFrame)
             return
         }
 
-        // Lookup mode — call API
-        fetchAndStore(plate: plate, country: countryCode, location: location, capturedFrame: capturedFrame)
+        // Lookup mode — enqueue for async API lookup.
+        let photoFileName = saveFrameIfNeeded(capturedFrame, plate: plate)
+        let item = PlateQueueItem(
+            plate: plate,
+            country: countryCode,
+            location: CodableCoordinate(location),
+            enqueuedAt: Date(),
+            capturedFrameFileName: photoFileName,
+            state: .pending
+        )
+        let didEnqueue = lookupQueue.enqueue(item)
+        if !didEnqueue, let photoFileName = photoFileName {
+            // Dedup: another enqueue for this plate is already in flight.
+            // Delete the now-orphaned JPEG we just wrote.
+            StorageService.shared.deletePhoto(fileName: photoFileName)
+        }
     }
 
     // MARK: - Refresh (detail screen)
@@ -175,49 +201,35 @@ final class ScanViewModel {
 
     // MARK: - Private
 
-    private func fetchAndStore(plate: String, country: String, location: CLLocationCoordinate2D, capturedFrame: UIImage?) {
-        isFetching = true
-        lastError = nil
-        print("[ScanVM] 🌐 Fetching API for plate=\(plate) country=\(country)")
-        NetworkService.shared.fetchVehicle(plate: plate, country: country)
-            .receive(on: DispatchQueue.main)
-            .sink(receiveCompletion: { [weak self] completion in
-                self?.isFetching = false
-                if case .failure(let error) = completion {
-                    print("[ScanVM] ❌ API error for \(plate): \(error)")
-                    // On rate limit, cooldown this plate for the server-specified duration
-                    if case .rateLimited(let retryAfter) = error {
-                        self?.cooldownPlates[plate] = Date().addingTimeInterval(TimeInterval(retryAfter))
-                        self?.lastError = "Rate limited — wait \(retryAfter)s"
-                    } else {
-                        self?.lastError = error.localizedDescription
-                    }
-                    // Auto-clear error after 3 seconds
-                    let msg = self?.lastError
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
-                        if self?.lastError == msg {
-                            self?.lastError = nil
-                        }
-                    }
-                }
-            }, receiveValue: { [weak self] vehicleData in
-                print("[ScanVM] ✅ API success for \(plate): \(vehicleData.make ?? "?") \(vehicleData.model ?? "?")")
-                guard let self = self else { return }
-                let photoFileName = self.saveFrameIfNeeded(capturedFrame, plate: plate)
-                let sighting = Sighting(
-                    location: CodableCoordinate(location),
-                    date: Date(),
-                    photoFileName: photoFileName
-                )
-                let record = PlateScanRecord(
-                    plate: plate,
-                    vehicleData: vehicleData,
-                    sightings: [sighting]
-                )
-                self.scanRecords.append(record)
-                StorageService.shared.saveRecords(self.scanRecords)
-            })
-            .store(in: &subscriptions)
+    private func storePlateOnly(plate: String, location: CLLocationCoordinate2D, capturedFrame: UIImage?) {
+        let photoFileName = saveFrameIfNeeded(capturedFrame, plate: plate)
+        let sighting = Sighting(
+            location: CodableCoordinate(location),
+            date: Date(),
+            photoFileName: photoFileName
+        )
+        let record = PlateScanRecord(
+            plate: plate,
+            vehicleData: nil,
+            sightings: [sighting]
+        )
+        scanRecords.append(record)
+        StorageService.shared.saveRecords(scanRecords)
+    }
+
+    private func storeRecord(for item: PlateQueueItem, vehicleData: VehicleData?) {
+        let sighting = Sighting(
+            location: item.location,
+            date: Date(),
+            photoFileName: item.capturedFrameFileName
+        )
+        let record = PlateScanRecord(
+            plate: item.plate,
+            vehicleData: vehicleData,
+            sightings: [sighting]
+        )
+        scanRecords.append(record)
+        StorageService.shared.saveRecords(scanRecords)
     }
 
     private func saveFrameIfNeeded(_ frame: UIImage?, plate: String) -> String? {
@@ -225,5 +237,9 @@ final class ScanViewModel {
         let fileName = "\(plate)_\(Int(Date().timeIntervalSince1970)).jpg"
         StorageService.shared.savePhoto(frame, fileName: fileName)
         return fileName
+    }
+
+    @objc private func handleWillTerminate() {
+        lookupQueue.flushAllToFallback()
     }
 }

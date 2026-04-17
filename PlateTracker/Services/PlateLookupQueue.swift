@@ -19,15 +19,15 @@ final class PlateLookupQueue {
     @Published private(set) var items: [PlateQueueItem] = []
 
     private let fetcher: VehicleFetching
-    private let onComplete: (PlateQueueItem, PlateLookupOutcome) -> Void
+    private var onComplete: ((PlateQueueItem, PlateLookupOutcome) -> Void)?
     private var activeSubscription: AnyCancellable?
 
-    init(
-        fetcher: VehicleFetching,
-        onComplete: @escaping (PlateQueueItem, PlateLookupOutcome) -> Void
-    ) {
+    init(fetcher: VehicleFetching) {
         self.fetcher = fetcher
-        self.onComplete = onComplete
+    }
+
+    func setCompletionHandler(_ handler: @escaping (PlateQueueItem, PlateLookupOutcome) -> Void) {
+        self.onComplete = handler
     }
 
     /// Enqueue a new plate. Returns false if the plate is already present
@@ -59,7 +59,7 @@ final class PlateLookupQueue {
         let drained = items
         items.removeAll()
         for item in drained {
-            onComplete(item, .cancelled)
+            onComplete?(item, .cancelled)
         }
     }
 
@@ -98,7 +98,7 @@ final class PlateLookupQueue {
             return
         }
         let item = items.remove(at: idx)
-        onComplete(item, outcome)
+        onComplete?(item, outcome)
         processNextIfIdle()
     }
 
