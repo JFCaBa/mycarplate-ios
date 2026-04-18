@@ -230,6 +230,15 @@ final class ScanViewModel {
         scanRecords = []
     }
 
+    // MARK: - Sighting mutation
+
+    func updateSightingNote(plate: String, sightingIndex: Int, note: String?) {
+        guard let recordIdx = scanRecords.firstIndex(where: { $0.plate == plate }),
+              sightingIndex >= 0, sightingIndex < scanRecords[recordIdx].sightings.count else { return }
+        scanRecords[recordIdx].sightings[sightingIndex].note = note
+        StorageService.shared.saveRecords(scanRecords)
+    }
+
     // MARK: - Private
 
     private func storePlateOnly(plate: String, location: CLLocationCoordinate2D, capturedFrame: UIImage?) {

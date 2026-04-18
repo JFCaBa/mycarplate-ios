@@ -40,6 +40,13 @@ final class PhotoViewerViewController: UIViewController {
         b.accessibilityLabel = "Delete"
         return b
     }()
+    private let noteButton: UIButton = {
+        let b = UIButton(type: .system)
+        b.setImage(UIImage(systemName: "square.and.pencil"), for: .normal)
+        b.tintColor = .white
+        b.accessibilityLabel = "Note"
+        return b
+    }()
 
     init(vehicles: [PlateScanRecord], startIndex: Int, scanViewModel: ScanViewModel) {
         self.viewModel = PhotoViewerViewModel(vehicles: vehicles, startIndex: startIndex)
@@ -82,7 +89,8 @@ final class PhotoViewerViewController: UIViewController {
         topBar.contentView.addSubview(titleLabel)
         topBar.contentView.addSubview(infoButton)
         bottomBar.contentView.addSubview(deleteButton)
-        for v in [backButton, titleLabel, infoButton, deleteButton] {
+        bottomBar.contentView.addSubview(noteButton)
+        for v in [backButton, titleLabel, infoButton, deleteButton, noteButton] {
             v.translatesAutoresizingMaskIntoConstraints = false
         }
 
@@ -106,11 +114,15 @@ final class PhotoViewerViewController: UIViewController {
 
             deleteButton.trailingAnchor.constraint(equalTo: bottomBar.trailingAnchor, constant: -24),
             deleteButton.topAnchor.constraint(equalTo: bottomBar.topAnchor, constant: 12),
+
+            noteButton.leadingAnchor.constraint(equalTo: bottomBar.leadingAnchor, constant: 24),
+            noteButton.topAnchor.constraint(equalTo: bottomBar.topAnchor, constant: 12),
         ])
 
         backButton.addTarget(self, action: #selector(dismissTapped), for: .touchUpInside)
         infoButton.addTarget(self, action: #selector(infoTapped), for: .touchUpInside)
         deleteButton.addTarget(self, action: #selector(deleteTapped), for: .touchUpInside)
+        noteButton.addTarget(self, action: #selector(noteTapped), for: .touchUpInside)
     }
 
     private func setupSwipeUpGesture() {
@@ -202,6 +214,26 @@ final class PhotoViewerViewController: UIViewController {
             pageController.setViewControllers([page], direction: .forward, animated: true)
             updateChromeForCurrentVehicle()
         }
+    }
+
+    @objc private func noteTapped() {
+        guard let vehicle = viewModel.currentVehicle,
+              let vehicleIdx = viewModel.vehicles.firstIndex(where: { $0.plate == vehicle.plate }) else { return }
+        let sightingIdx = viewModel.currentSightingIndex(forVehicle: vehicleIdx)
+        let initial = vehicle.sightings[sightingIdx].note
+        let editor = NoteEditorViewController(initialText: initial) { [weak self] newText in
+            guard let self = self else { return }
+            self.scanViewModel.updateSightingNote(plate: vehicle.plate, sightingIndex: sightingIdx, note: newText)
+            // Refresh local copy so subsequent reads see the new note.
+            if let updated = self.scanViewModel.scanRecords.first(where: { $0.plate == vehicle.plate }) {
+                self.viewModel.replaceVehicle(at: vehicleIdx, with: updated)
+            }
+            // Trigger the current page to reload its filmstrip.
+            (self.pageController.viewControllers?.first as? PhotoPageViewController)?.reloadFilmstrip()
+        }
+        let nav = UINavigationController(rootViewController: editor)
+        nav.modalPresentationStyle = .formSheet
+        present(nav, animated: true)
     }
 }
 

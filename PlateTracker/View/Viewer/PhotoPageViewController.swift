@@ -75,6 +75,10 @@ final class PhotoPageViewController: UIViewController {
         filmstrip.isHidden = !filmstripVisible
     }
 
+    func reloadFilmstrip() {
+        filmstrip.reloadData()
+    }
+
     private func loadCurrentPhoto(animated: Bool) {
         let sighting = record.sightings[sightingIndex]
         guard let fileName = sighting.photoFileName else {
@@ -130,15 +134,32 @@ final class FilmstripFrameCell: UICollectionViewCell {
         return iv
     }()
 
+    private let noteDot: UIView = {
+        let v = UIView()
+        v.backgroundColor = .white
+        v.layer.cornerRadius = 3
+        v.layer.borderColor = UIColor.black.withAlphaComponent(0.5).cgColor
+        v.layer.borderWidth = 0.5
+        v.isHidden = true
+        return v
+    }()
+
     override init(frame: CGRect) {
         super.init(frame: frame)
         contentView.addSubview(imageView)
+        contentView.addSubview(noteDot)
         imageView.translatesAutoresizingMaskIntoConstraints = false
+        noteDot.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             imageView.topAnchor.constraint(equalTo: contentView.topAnchor),
             imageView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
             imageView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
             imageView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+
+            noteDot.widthAnchor.constraint(equalToConstant: 6),
+            noteDot.heightAnchor.constraint(equalToConstant: 6),
+            noteDot.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -3),
+            noteDot.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -3),
         ])
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -155,5 +176,6 @@ final class FilmstripFrameCell: UICollectionViewCell {
         contentView.layer.borderWidth = isActive ? 2 : 0
         contentView.layer.cornerRadius = 4
         contentView.layer.masksToBounds = true
+        noteDot.isHidden = (sighting.note?.isEmpty ?? true)
     }
 }
