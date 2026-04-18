@@ -95,7 +95,8 @@ final class VehicleTileCell: UICollectionViewCell {
 
         accessibilityLabel = Self.accessibilityLabel(for: record)
 
-        if let fileName = record.sightings.last?.photoFileName {
+        let activeFileName = record.sightings.last.flatMap { $0.editedPhotoFileName ?? $0.photoFileName }
+        if let fileName = activeFileName {
             currentFileName = fileName
             placeholderImageView.isHidden = true
             imageView.image = nil

@@ -65,6 +65,29 @@ final class StorageService {
         try? fileManager.removeItem(at: url)
     }
 
+    // MARK: - Edited photos (non-destructive)
+
+    /// Writes an edited copy alongside the original. Returns the new file name,
+    /// or nil if the image couldn't be encoded.
+    func saveEditedPhoto(originalFileName: String, image: UIImage) -> String? {
+        guard let data = image.jpegData(compressionQuality: 0.4) else { return nil }
+        let stem = (originalFileName as NSString).deletingPathExtension
+        let ext = (originalFileName as NSString).pathExtension.isEmpty ? "jpg" : (originalFileName as NSString).pathExtension
+        let editedName = "\(stem)__edit-\(UUID().uuidString).\(ext)"
+        let url = photosDirectory.appendingPathComponent(editedName)
+        do {
+            try data.write(to: url, options: .atomic)
+            return editedName
+        } catch {
+            return nil
+        }
+    }
+
+    func deleteEditedPhoto(fileName: String) {
+        let url = photosDirectory.appendingPathComponent(fileName)
+        try? fileManager.removeItem(at: url)
+    }
+
     // MARK: - Storage metrics
 
     func photoFileSize(fileName: String) -> Int64 {

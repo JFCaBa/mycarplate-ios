@@ -81,7 +81,8 @@ final class PhotoPageViewController: UIViewController {
 
     private func loadCurrentPhoto(animated: Bool) {
         let sighting = record.sightings[sightingIndex]
-        guard let fileName = sighting.photoFileName else {
+        let activeFileName = sighting.editedPhotoFileName ?? sighting.photoFileName
+        guard let fileName = activeFileName else {
             photoView.image = UIImage(systemName: "car.fill")
             photoView.tintColor = .secondaryLabel
             return
@@ -165,7 +166,7 @@ final class FilmstripFrameCell: UICollectionViewCell {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     func configure(sighting: Sighting, isActive: Bool) {
-        if let fileName = sighting.photoFileName {
+        if let fileName = sighting.editedPhotoFileName ?? sighting.photoFileName {
             PhotoCache.shared.loadAsync(fileName: fileName) { [weak self] image in
                 self?.imageView.image = image
             }

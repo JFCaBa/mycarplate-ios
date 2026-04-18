@@ -25,6 +25,7 @@ struct Sighting: Codable {
     let date: Date
     let photoFileName: String?
     var note: String?
+    var editedPhotoFileName: String?
 }
 
 struct PlateScanRecord: Codable {

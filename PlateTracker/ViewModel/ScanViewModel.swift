@@ -211,6 +211,9 @@ final class ScanViewModel {
         if let photoName = sighting.photoFileName {
             StorageService.shared.deletePhoto(fileName: photoName)
         }
+        if let editedName = sighting.editedPhotoFileName {
+            StorageService.shared.deleteEditedPhoto(fileName: editedName)
+        }
         scanRecords[recordIdx].sightings.remove(at: sightingIndex)
         StorageService.shared.saveRecords(scanRecords)
     }
