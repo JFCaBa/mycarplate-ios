@@ -221,8 +221,13 @@ final class ScanViewModel {
     func deleteRecord(for plate: String) {
         guard let idx = scanRecords.firstIndex(where: { $0.plate == plate }) else { return }
         let record = scanRecords[idx]
-        record.sightings.compactMap(\.photoFileName).forEach {
-            StorageService.shared.deletePhoto(fileName: $0)
+        for sighting in record.sightings {
+            if let original = sighting.photoFileName {
+                StorageService.shared.deletePhoto(fileName: original)
+            }
+            if let edited = sighting.editedPhotoFileName {
+                StorageService.shared.deleteEditedPhoto(fileName: edited)
+            }
         }
         scanRecords.remove(at: idx)
         StorageService.shared.saveRecords(scanRecords)

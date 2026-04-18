@@ -89,11 +89,16 @@ final class InfoSheetViewController: UIViewController {
             return a
         }
         mapView.addAnnotations(annotations)
-        let rect = annotations.reduce(MKMapRect.null) { acc, ann in
-            let p = MKMapPoint(ann.coordinate)
-            return acc.union(MKMapRect(x: p.x, y: p.y, width: 0, height: 0))
+        if annotations.count == 1 {
+            let region = MKCoordinateRegion(
+                center: annotations[0].coordinate,
+                latitudinalMeters: 500,
+                longitudinalMeters: 500
+            )
+            mapView.setRegion(region, animated: false)
+        } else {
+            mapView.showAnnotations(annotations, animated: false)
         }
-        mapView.setVisibleMapRect(rect, edgePadding: UIEdgeInsets(top: 24, left: 24, bottom: 24, right: 24), animated: false)
     }
 
     private func bind() {

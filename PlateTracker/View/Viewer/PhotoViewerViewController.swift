@@ -208,6 +208,9 @@ final class PhotoViewerViewController: UIViewController {
             self?.performDelete()
         })
         alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        // Required for iPad — actionSheet without a source view crashes there.
+        alert.popoverPresentationController?.sourceView = deleteButton
+        alert.popoverPresentationController?.sourceRect = deleteButton.bounds
         present(alert, animated: true)
     }
 
