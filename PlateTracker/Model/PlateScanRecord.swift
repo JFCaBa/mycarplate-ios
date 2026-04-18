@@ -30,6 +30,7 @@ struct PlateScanRecord: Codable {
     let plate: String
     var vehicleData: VehicleData?
     var sightings: [Sighting]
+    var lastLookupAttempt: Date?
 
     var latestSighting: Sighting? { sightings.last }
     var latestLocation: CLLocationCoordinate2D? { latestSighting?.location.clCoordinate }

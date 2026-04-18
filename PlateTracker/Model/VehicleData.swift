@@ -16,7 +16,7 @@ struct VehicleData: Codable {
     let engineSize: String?
     let fuelType: String?
     let doors: Int?
-    let horsePower: Int?
+    let horsePower: Double?
     let versionOptions: [String]?
     let doorsOptions: [Int]?
     let co2Emissions: String?
@@ -33,6 +33,7 @@ struct VehicleData: Codable {
     let firstRegistration: String?
     let powerKw: Double?
     let base7Code: String?
+    let base7CodeOptions: [String]?
     let weight: Int?
     let vin: String?
     let engineCode: String?

@@ -97,6 +97,23 @@ final class ScanViewModel {
         // if we're within Self.minSightingDistanceMeters of it (stationary device
         // or same-car re-scan). Avoids piling up near-duplicate sightings.
         if let index = scanRecords.firstIndex(where: { $0.plate == plate }) {
+            // No vehicle data and lookup was never attempted — re-enqueue (handles stale nil records).
+            if scanRecords[index].vehicleData == nil,
+               scanRecords[index].lastLookupAttempt == nil,
+               isLookupEnabled,
+               cooldownPlates[plate].map({ Date() < $0 }) != true,
+               !lookupQueue.items.contains(where: { $0.plate == plate }) {
+                let item = PlateQueueItem(
+                    plate: plate,
+                    country: countryCode,
+                    location: CodableCoordinate(location),
+                    enqueuedAt: Date(),
+                    capturedFrameFileName: nil,
+                    state: .pending
+                )
+                _ = lookupQueue.enqueue(item)
+            }
+
             if let last = scanRecords[index].sightings.last {
                 let lastCL = CLLocation(
                     latitude: last.location.latitude,
@@ -143,6 +160,9 @@ final class ScanViewModel {
         }
 
         // Lookup mode — enqueue for async API lookup.
+        // Skip if the plate is already pending or processing in the queue.
+        guard !lookupQueue.items.contains(where: { $0.plate == plate }) else { return }
+
         let photoFileName = saveFrameIfNeeded(capturedFrame, plate: plate)
         let item = PlateQueueItem(
             plate: plate,
@@ -223,11 +243,12 @@ final class ScanViewModel {
             date: Date(),
             photoFileName: item.capturedFrameFileName
         )
-        let record = PlateScanRecord(
+        var record = PlateScanRecord(
             plate: item.plate,
             vehicleData: vehicleData,
             sightings: [sighting]
         )
+        record.lastLookupAttempt = Date()
         scanRecords.append(record)
         StorageService.shared.saveRecords(scanRecords)
     }

@@ -23,7 +23,11 @@ final class VehicleDetailViewModel {
     @Published private(set) var isRefreshing = false
 
     let plate: String
-    var country: String { record?.vehicleData?.country ?? "ES" }
+    var country: String {
+        record?.vehicleData?.country
+            ?? UserDefaults.standard.string(forKey: "selectedCountry")
+            ?? "ES"
+    }
     var latestPhotoFileName: String? { record?.sightings.last?.photoFileName }
 
     private var record: PlateScanRecord? {
@@ -89,7 +93,7 @@ final class VehicleDetailViewModel {
                 v.engineSize.map { DetailRow(label: "Engine Size", value: $0) },
                 v.engineCode.map { DetailRow(label: "Engine Code", value: $0) },
                 v.fuelType.map { DetailRow(label: "Fuel Type", value: $0) },
-                v.horsePower.map { DetailRow(label: "Horse Power", value: "\($0) HP") },
+                v.horsePower.map { DetailRow(label: "Horse Power", value: $0.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int($0)) HP" : "\($0) HP") },
                 v.powerKw.map { DetailRow(label: "Power", value: "\($0) kW") },
                 v.netMaximumPower.map { DetailRow(label: "Net Max Power", value: $0) },
             ].compactMap { $0 }
@@ -131,6 +135,7 @@ final class VehicleDetailViewModel {
             // Identifiers
             let idRows: [DetailRow] = [
                 v.base7Code.map { DetailRow(label: "Base7 Code", value: $0) },
+                v.base7CodeOptions.map { DetailRow(label: "Base7 Options", value: $0.joined(separator: ", ")) },
                 v.source.map { DetailRow(label: "Source", value: $0) },
                 v.confidence.map { DetailRow(label: "Confidence", value: String(format: "%.0f%%", $0 * 100)) },
             ].compactMap { $0 }
