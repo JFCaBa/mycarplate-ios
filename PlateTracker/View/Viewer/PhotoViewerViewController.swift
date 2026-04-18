@@ -47,6 +47,22 @@ final class PhotoViewerViewController: UIViewController {
         b.accessibilityLabel = "Note"
         return b
     }()
+    private let editButton: UIButton = {
+        let b = UIButton(type: .system)
+        b.setImage(UIImage(systemName: "slider.horizontal.3"), for: .normal)
+        b.tintColor = .white
+        b.accessibilityLabel = "Edit"
+        return b
+    }()
+
+    private let revertButton: UIButton = {
+        let b = UIButton(type: .system)
+        b.setImage(UIImage(systemName: "arrow.uturn.backward"), for: .normal)
+        b.tintColor = .white
+        b.accessibilityLabel = "Revert to original"
+        b.isHidden = true
+        return b
+    }()
 
     init(vehicles: [PlateScanRecord], startIndex: Int, scanViewModel: ScanViewModel) {
         self.viewModel = PhotoViewerViewModel(vehicles: vehicles, startIndex: startIndex)
@@ -90,7 +106,9 @@ final class PhotoViewerViewController: UIViewController {
         topBar.contentView.addSubview(infoButton)
         bottomBar.contentView.addSubview(deleteButton)
         bottomBar.contentView.addSubview(noteButton)
-        for v in [backButton, titleLabel, infoButton, deleteButton, noteButton] {
+        bottomBar.contentView.addSubview(editButton)
+        bottomBar.contentView.addSubview(revertButton)
+        for v in [backButton, titleLabel, infoButton, deleteButton, noteButton, editButton, revertButton] {
             v.translatesAutoresizingMaskIntoConstraints = false
         }
 
@@ -117,12 +135,19 @@ final class PhotoViewerViewController: UIViewController {
 
             noteButton.leadingAnchor.constraint(equalTo: bottomBar.leadingAnchor, constant: 24),
             noteButton.topAnchor.constraint(equalTo: bottomBar.topAnchor, constant: 12),
+
+            editButton.centerXAnchor.constraint(equalTo: bottomBar.centerXAnchor),
+            editButton.topAnchor.constraint(equalTo: bottomBar.topAnchor, constant: 12),
+            revertButton.centerXAnchor.constraint(equalTo: bottomBar.centerXAnchor, constant: 56),
+            revertButton.topAnchor.constraint(equalTo: bottomBar.topAnchor, constant: 12),
         ])
 
         backButton.addTarget(self, action: #selector(dismissTapped), for: .touchUpInside)
         infoButton.addTarget(self, action: #selector(infoTapped), for: .touchUpInside)
         deleteButton.addTarget(self, action: #selector(deleteTapped), for: .touchUpInside)
         noteButton.addTarget(self, action: #selector(noteTapped), for: .touchUpInside)
+        editButton.addTarget(self, action: #selector(editTapped), for: .touchUpInside)
+        revertButton.addTarget(self, action: #selector(revertTapped), for: .touchUpInside)
     }
 
     private func setupSwipeUpGesture() {
@@ -149,6 +174,7 @@ final class PhotoViewerViewController: UIViewController {
 
     private func updateChromeForCurrentVehicle() {
         titleLabel.text = viewModel.currentVehicle?.plate
+        revertButton.isHidden = !currentSightingHasEdit()
     }
 
     @objc private func dismissTapped() {
@@ -234,6 +260,64 @@ final class PhotoViewerViewController: UIViewController {
         let nav = UINavigationController(rootViewController: editor)
         nav.modalPresentationStyle = .formSheet
         present(nav, animated: true)
+    }
+
+    private func currentSighting() -> (vehicleIdx: Int, sighting: Sighting)? {
+        guard let vehicle = viewModel.currentVehicle,
+              let vehicleIdx = viewModel.vehicles.firstIndex(where: { $0.plate == vehicle.plate }) else { return nil }
+        let sIdx = viewModel.currentSightingIndex(forVehicle: vehicleIdx)
+        return (vehicleIdx, vehicle.sightings[sIdx])
+    }
+
+    private func currentSightingHasEdit() -> Bool {
+        currentSighting()?.sighting.editedPhotoFileName != nil
+    }
+
+    @objc private func editTapped() {
+        guard let info = currentSighting() else { return }
+        let activeFileName = info.sighting.editedPhotoFileName ?? info.sighting.photoFileName
+        guard let fileName = activeFileName,
+              let image = StorageService.shared.loadPhoto(fileName: fileName) else { return }
+
+        let editor = PhotoEditorViewController(image: image) { [weak self] edited in
+            self?.dismiss(animated: true) {
+                guard let self = self, let edited = edited, let vehicle = self.viewModel.currentVehicle else { return }
+                let sIdx = self.viewModel.currentSightingIndex(forVehicle: info.vehicleIdx)
+                self.scanViewModel.saveEditedPhoto(plate: vehicle.plate, sightingIndex: sIdx, image: edited)
+                self.refreshCurrentVehicleFromScanVM()
+            }
+        }
+        let nav = UINavigationController(rootViewController: editor)
+        nav.modalPresentationStyle = .fullScreen
+        present(nav, animated: true)
+    }
+
+    @objc private func revertTapped() {
+        guard let info = currentSighting(), let vehicle = viewModel.currentVehicle else { return }
+        let alert = UIAlertController(title: "Revert to original?", message: "Your edits to this photo will be discarded.", preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "Revert", style: .destructive) { [weak self] _ in
+            guard let self = self else { return }
+            let sIdx = self.viewModel.currentSightingIndex(forVehicle: info.vehicleIdx)
+            self.scanViewModel.revertSightingEdit(plate: vehicle.plate, sightingIndex: sIdx)
+            self.refreshCurrentVehicleFromScanVM()
+        })
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        present(alert, animated: true)
+    }
+
+    private func refreshCurrentVehicleFromScanVM() {
+        guard let vehicle = viewModel.currentVehicle,
+              let vehicleIdx = viewModel.vehicles.firstIndex(where: { $0.plate == vehicle.plate }),
+              let updated = scanViewModel.scanRecords.first(where: { $0.plate == vehicle.plate }) else { return }
+        viewModel.replaceVehicle(at: vehicleIdx, with: updated)
+        // Pre-warm the new edited file in cache (its name is unique so no stale entry to evict).
+        if let edited = updated.sightings.last?.editedPhotoFileName {
+            PhotoCache.shared.loadAsync(fileName: edited) { _ in }
+        }
+        // Replace the current page so loadCurrentPhoto reads the new file.
+        let page = makePage(for: updated)
+        pageController.setViewControllers([page], direction: .forward, animated: false)
+        updateChromeForCurrentVehicle()
     }
 }
 

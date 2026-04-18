@@ -242,6 +242,29 @@ final class ScanViewModel {
         StorageService.shared.saveRecords(scanRecords)
     }
 
+    func saveEditedPhoto(plate: String, sightingIndex: Int, image: UIImage) {
+        guard let recordIdx = scanRecords.firstIndex(where: { $0.plate == plate }),
+              sightingIndex >= 0, sightingIndex < scanRecords[recordIdx].sightings.count,
+              let originalName = scanRecords[recordIdx].sightings[sightingIndex].photoFileName,
+              let editedName = StorageService.shared.saveEditedPhoto(originalFileName: originalName, image: image) else { return }
+
+        // Delete any previous edited file for this sighting.
+        if let oldEdited = scanRecords[recordIdx].sightings[sightingIndex].editedPhotoFileName {
+            StorageService.shared.deleteEditedPhoto(fileName: oldEdited)
+        }
+        scanRecords[recordIdx].sightings[sightingIndex].editedPhotoFileName = editedName
+        StorageService.shared.saveRecords(scanRecords)
+    }
+
+    func revertSightingEdit(plate: String, sightingIndex: Int) {
+        guard let recordIdx = scanRecords.firstIndex(where: { $0.plate == plate }),
+              sightingIndex >= 0, sightingIndex < scanRecords[recordIdx].sightings.count,
+              let editedName = scanRecords[recordIdx].sightings[sightingIndex].editedPhotoFileName else { return }
+        StorageService.shared.deleteEditedPhoto(fileName: editedName)
+        scanRecords[recordIdx].sightings[sightingIndex].editedPhotoFileName = nil
+        StorageService.shared.saveRecords(scanRecords)
+    }
+
     // MARK: - Private
 
     private func storePlateOnly(plate: String, location: CLLocationCoordinate2D, capturedFrame: UIImage?) {
