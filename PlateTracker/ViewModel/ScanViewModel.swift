@@ -204,6 +204,17 @@ final class ScanViewModel {
 
     // MARK: - Deletion (storage management)
 
+    func deleteSighting(plate: String, sightingIndex: Int) {
+        guard let recordIdx = scanRecords.firstIndex(where: { $0.plate == plate }),
+              sightingIndex >= 0, sightingIndex < scanRecords[recordIdx].sightings.count else { return }
+        let sighting = scanRecords[recordIdx].sightings[sightingIndex]
+        if let photoName = sighting.photoFileName {
+            StorageService.shared.deletePhoto(fileName: photoName)
+        }
+        scanRecords[recordIdx].sightings.remove(at: sightingIndex)
+        StorageService.shared.saveRecords(scanRecords)
+    }
+
     func deleteRecord(for plate: String) {
         guard let idx = scanRecords.firstIndex(where: { $0.plate == plate }) else { return }
         let record = scanRecords[idx]

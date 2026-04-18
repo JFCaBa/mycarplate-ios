@@ -9,7 +9,7 @@ import Foundation
 final class PhotoViewerViewModel {
 
     private(set) var vehicles: [PlateScanRecord]
-    private(set) var currentIndex: Int
+    var currentIndex: Int
 
     /// Per-vehicle (by plate) currently-selected sighting index.
     private var sightingIndexByPlate: [String: Int] = [:]
@@ -46,6 +46,11 @@ final class PhotoViewerViewModel {
     func setCurrentSightingIndex(_ value: Int, forVehicle index: Int) {
         guard index >= 0, index < vehicles.count else { return }
         sightingIndexByPlate[vehicles[index].plate] = value
+    }
+
+    func replaceVehicle(at index: Int, with record: PlateScanRecord) {
+        guard index >= 0, index < vehicles.count else { return }
+        vehicles[index] = record
     }
 
     /// Removes the currently displayed vehicle from the in-memory list.
