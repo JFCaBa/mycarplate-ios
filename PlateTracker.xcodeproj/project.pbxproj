@@ -6,8 +6,19 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXContainerItemProxy section */
+		82875F052F93670E007A01D2 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 821EE6432E2E2797009C620D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 821EE64A2E2E2797009C620D;
+			remoteInfo = PlateTracker;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		821EE64B2E2E2797009C620D /* PlateTracker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PlateTracker.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		82875F012F93670E007A01D2 /* PlateTrackerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PlateTrackerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -29,10 +40,22 @@
 			path = PlateTracker;
 			sourceTree = "<group>";
 		};
+		82875F022F93670E007A01D2 /* PlateTrackerTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = PlateTrackerTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		821EE6482E2E2797009C620D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		82875EFE2F93670E007A01D2 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -46,6 +69,7 @@
 			isa = PBXGroup;
 			children = (
 				821EE64D2E2E2797009C620D /* PlateTracker */,
+				82875F022F93670E007A01D2 /* PlateTrackerTests */,
 				821EE64C2E2E2797009C620D /* Products */,
 			);
 			sourceTree = "<group>";
@@ -54,6 +78,7 @@
 			isa = PBXGroup;
 			children = (
 				821EE64B2E2E2797009C620D /* PlateTracker.app */,
+				82875F012F93670E007A01D2 /* PlateTrackerTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -83,6 +108,29 @@
 			productReference = 821EE64B2E2E2797009C620D /* PlateTracker.app */;
 			productType = "com.apple.product-type.application";
 		};
+		82875F002F93670E007A01D2 /* PlateTrackerTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 82875F092F93670E007A01D2 /* Build configuration list for PBXNativeTarget "PlateTrackerTests" */;
+			buildPhases = (
+				82875EFD2F93670E007A01D2 /* Sources */,
+				82875EFE2F93670E007A01D2 /* Frameworks */,
+				82875EFF2F93670E007A01D2 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				82875F062F93670E007A01D2 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				82875F022F93670E007A01D2 /* PlateTrackerTests */,
+			);
+			name = PlateTrackerTests;
+			packageProductDependencies = (
+			);
+			productName = PlateTrackerTests;
+			productReference = 82875F012F93670E007A01D2 /* PlateTrackerTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -90,11 +138,15 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1620;
+				LastSwiftUpdateCheck = 2610;
 				LastUpgradeCheck = 1620;
 				TargetAttributes = {
 					821EE64A2E2E2797009C620D = {
 						CreatedOnToolsVersion = 16.2;
+					};
+					82875F002F93670E007A01D2 = {
+						CreatedOnToolsVersion = 26.1.1;
+						TestTargetID = 821EE64A2E2E2797009C620D;
 					};
 				};
 			};
@@ -113,12 +165,20 @@
 			projectRoot = "";
 			targets = (
 				821EE64A2E2E2797009C620D /* PlateTracker */,
+				82875F002F93670E007A01D2 /* PlateTrackerTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		821EE6492E2E2797009C620D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		82875EFF2F93670E007A01D2 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -135,7 +195,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		82875EFD2F93670E007A01D2 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		82875F062F93670E007A01D2 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 821EE64A2E2E2797009C620D /* PlateTracker */;
+			targetProxy = 82875F052F93670E007A01D2 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		821EE65F2E2E2799009C620D /* Debug */ = {
@@ -317,6 +392,50 @@
 			};
 			name = Release;
 		};
+		82875F072F93670E007A01D2 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = JH8NFJ6XW7;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = team.338.PlateTrackerTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PlateTracker.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/PlateTracker";
+			};
+			name = Debug;
+		};
+		82875F082F93670E007A01D2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = JH8NFJ6XW7;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = team.338.PlateTrackerTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/PlateTracker.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/PlateTracker";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -334,6 +453,15 @@
 			buildConfigurations = (
 				821EE65F2E2E2799009C620D /* Debug */,
 				821EE6602E2E2799009C620D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		82875F092F93670E007A01D2 /* Build configuration list for PBXNativeTarget "PlateTrackerTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				82875F072F93670E007A01D2 /* Debug */,
+				82875F082F93670E007A01D2 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
