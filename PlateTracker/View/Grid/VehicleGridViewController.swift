@@ -125,11 +125,12 @@ extension VehicleGridViewController: UICollectionViewDataSource {
 extension VehicleGridViewController: UICollectionViewDelegate {
     func collectionView(_ cv: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         cv.deselectItem(at: indexPath, animated: true)
-        let record = viewModel.sections[indexPath.section].records[indexPath.item]
-        // Phase 1: keep pushing the existing detail VC. Phase 2 replaces this with the viewer.
-        let detailVC = VehicleDetailViewController()
-        detailVC.configure(with: record.plate, scanViewModel: scanViewModel)
-        navigationController?.pushViewController(detailVC, animated: true)
+        // Build the linear list of all currently-displayed vehicles in the order they appear in the grid.
+        let vehicles = viewModel.sections.flatMap { $0.records }
+        let tappedRecord = viewModel.sections[indexPath.section].records[indexPath.item]
+        guard let startIndex = vehicles.firstIndex(where: { $0.plate == tappedRecord.plate }) else { return }
+        let viewer = PhotoViewerViewController(vehicles: vehicles, startIndex: startIndex, scanViewModel: scanViewModel)
+        present(viewer, animated: true)
     }
 }
 
