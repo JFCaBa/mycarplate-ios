@@ -17,19 +17,16 @@ final class VehicleGridViewModel {
 
     @Published private(set) var sections: [Section] = []
 
-    /// Setting this immediately rebuilds sections (synchronous) and also
-    /// queues a debounced rebuild for rapid-typing UI scenarios.
+    /// Setting this synchronously rebuilds sections via `didSet`.
     var searchText: String = "" {
         didSet {
             guard searchText != oldValue else { return }
             rebuild()
-            searchSubject.send(searchText)
         }
     }
 
     private var allRecords: [PlateScanRecord] = []
     private var subscriptions = Set<AnyCancellable>()
-    private let searchSubject = PassthroughSubject<String, Never>()
 
     private static let absoluteDateFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -38,17 +35,7 @@ final class VehicleGridViewModel {
     }()
 
     /// Designated init for testing: no Combine subscription.
-    init() {
-        // Debounced pipeline handles rapid-typing in production UI;
-        // the didSet already rebuilt synchronously so we only need
-        // the debounced path for performance (UI binding may also
-        // observe $sections directly).
-        searchSubject
-            .debounce(for: .milliseconds(200), scheduler: RunLoop.main)
-            .removeDuplicates()
-            .sink { [weak self] _ in self?.rebuild() }
-            .store(in: &subscriptions)
-    }
+    init() {}
 
     /// Convenience init for production: subscribes to the scan VM.
     convenience init(scanViewModel: ScanViewModel) {
