@@ -30,9 +30,9 @@ final class MainTabBarController: UITabBarController {
         scanVC.configure(with: scanViewModel)
         scanVC.tabBarItem = UITabBarItem(title: "Scan", image: UIImage(systemName: "camera"), tag: 0)
 
-        let resultsVC = ResultsViewController()
-        resultsVC.configure(with: scanViewModel)
-        resultsVC.tabBarItem = UITabBarItem(title: "Results", image: UIImage(systemName: "list.bullet"), tag: 1)
+        let gridVC = VehicleGridViewController()
+        gridVC.configure(with: scanViewModel)
+        gridVC.tabBarItem = UITabBarItem(title: "Vehicles", image: UIImage(systemName: "square.grid.3x3"), tag: 1)
 
         let mapVC = MapViewController()
         mapVC.configure(with: scanViewModel)
@@ -44,7 +44,7 @@ final class MainTabBarController: UITabBarController {
 
         viewControllers = [
             UINavigationController(rootViewController: scanVC),
-            UINavigationController(rootViewController: resultsVC),
+            UINavigationController(rootViewController: gridVC),
             UINavigationController(rootViewController: mapVC),
             UINavigationController(rootViewController: settingsVC)
         ]
