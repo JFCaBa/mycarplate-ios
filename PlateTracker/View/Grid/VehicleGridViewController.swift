@@ -81,7 +81,7 @@ final class VehicleGridViewController: UIViewController {
     private func setupSearchController() {
         searchController.searchResultsUpdater = self
         searchController.obscuresBackgroundDuringPresentation = false
-        searchController.searchBar.placeholder = "Search plates, make, model"
+        searchController.searchBar.placeholder = "Search plates, make, model, notes"
         navigationItem.searchController = searchController
         navigationItem.hidesSearchBarWhenScrolling = false
     }

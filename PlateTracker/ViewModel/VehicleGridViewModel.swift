@@ -79,6 +79,7 @@ final class VehicleGridViewModel {
             if record.plate.lowercased().contains(q) { return true }
             if let make = record.vehicleData?.make?.lowercased(), make.contains(q) { return true }
             if let model = record.vehicleData?.model?.lowercased(), model.contains(q) { return true }
+            if record.sightings.contains(where: { ($0.note?.lowercased().contains(q)) == true }) { return true }
             return false
         }
     }

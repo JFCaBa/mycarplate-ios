@@ -101,4 +101,27 @@ final class VehicleGridViewModelTests: XCTestCase {
         let allPlates = vm.sections.flatMap { $0.records.map(\.plate) }
         XCTAssertEqual(Set(allPlates), Set(["AAA", "BBB"]))
     }
+
+    func test_search_matchesAcrossSightingNotes() {
+        let coord = CodableCoordinate(.init(latitude: 0, longitude: 0))
+        let withNote = PlateScanRecord(
+            plate: "AAA",
+            vehicleData: nil,
+            sightings: [
+                Sighting(location: coord, date: Date(), photoFileName: nil, note: "near the marina"),
+                Sighting(location: coord, date: Date(), photoFileName: nil, note: nil),
+            ]
+        )
+        let without = PlateScanRecord(
+            plate: "BBB",
+            vehicleData: nil,
+            sightings: [Sighting(location: coord, date: Date(), photoFileName: nil, note: nil)]
+        )
+        let vm = VehicleGridViewModel()
+        vm.update(records: [withNote, without])
+        vm.searchText = "marina"
+
+        let plates = vm.sections.flatMap { $0.records.map(\.plate) }
+        XCTAssertEqual(plates, ["AAA"])
+    }
 }
