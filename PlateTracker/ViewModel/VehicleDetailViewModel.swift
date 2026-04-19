@@ -148,13 +148,14 @@ final class VehicleDetailViewModel {
         let dateFormatter = DateFormatter()
         dateFormatter.dateStyle = .medium
         dateFormatter.timeStyle = .short
-        let sightingRows = record.sightings.reversed().map { sighting in
-            DetailRow(
-                label: dateFormatter.string(from: sighting.date),
-                value: String(format: "%.4f, %.4f",
-                              sighting.location.latitude,
-                              sighting.location.longitude)
-            )
+        let sightingRows = record.sightings.reversed().map { sighting -> DetailRow in
+            let value: String
+            if let loc = sighting.location {
+                value = String(format: "%.4f, %.4f", loc.latitude, loc.longitude)
+            } else {
+                value = "No location"
+            }
+            return DetailRow(label: dateFormatter.string(from: sighting.date), value: value)
         }
         if !sightingRows.isEmpty {
             allSections.append(DetailSection(

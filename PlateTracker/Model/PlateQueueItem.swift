@@ -19,7 +19,7 @@ struct PlateQueueItem: Equatable {
 
     let plate: String
     let country: String
-    let location: CodableCoordinate
+    let location: CodableCoordinate?
     let enqueuedAt: Date
     let capturedFrameFileName: String?
     var state: State

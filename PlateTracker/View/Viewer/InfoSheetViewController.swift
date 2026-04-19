@@ -78,7 +78,7 @@ final class InfoSheetViewController: UIViewController {
             mapEmptyLabel.isHidden = false
             return
         }
-        let coords = record.sightings.map { $0.location.clCoordinate }
+        let coords = record.sightings.compactMap { $0.location?.clCoordinate }
         guard !coords.isEmpty else {
             mapEmptyLabel.isHidden = false
             return

@@ -52,12 +52,13 @@ final class MapViewController: UIViewController {
 
         records.forEach { record in
             record.sightings.forEach { sighting in
+                guard let location = sighting.location else { return }
                 let annotation = MKPointAnnotation()
-                annotation.coordinate = sighting.location.clCoordinate
+                annotation.coordinate = location.clCoordinate
                 annotation.title = record.plate
                 annotation.subtitle = formatter.string(from: sighting.date)
                 mapView.addAnnotation(annotation)
-                lastCoordinate = sighting.location.clCoordinate
+                lastCoordinate = location.clCoordinate
             }
         }
 

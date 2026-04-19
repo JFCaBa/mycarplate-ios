@@ -77,17 +77,16 @@ final class ScanViewModel {
 
         print("[ScanVM] raw=\(raw) plate=\(plate) country=\(country.rawValue) valid=\(PlateValidator.isValid(plate: plate, for: country)) hasLocation=\(currentLocation != nil)")
 
-        guard PlateValidator.isValid(plate: plate, for: country),
-              let location = currentLocation else {
-            if !PlateValidator.isValid(plate: plate, for: country) {
-                print("[ScanVM] ❌ Not a valid \(country.rawValue) plate: '\(plate)'")
-            }
-            if currentLocation == nil {
-                print("[ScanVM] ❌ No GPS location available yet")
-            }
+        guard PlateValidator.isValid(plate: plate, for: country) else {
+            print("[ScanVM] ❌ Not a valid \(country.rawValue) plate: '\(plate)'")
             return
         }
 
+        // Location is best-effort — scanning proceeds without it (services denied
+        // or still warming up). Sightings without a location are stored with nil
+        // and skipped from map views.
+        let location = currentLocation
+        let codableLocation = location.map(CodableCoordinate.init)
         let countryCode = country.rawValue
 
         // Show detected plate immediately.
@@ -106,7 +105,7 @@ final class ScanViewModel {
                 let item = PlateQueueItem(
                     plate: plate,
                     country: countryCode,
-                    location: CodableCoordinate(location),
+                    location: codableLocation,
                     enqueuedAt: Date(),
                     capturedFrameFileName: nil,
                     state: .pending
@@ -114,15 +113,11 @@ final class ScanViewModel {
                 _ = lookupQueue.enqueue(item)
             }
 
-            if let last = scanRecords[index].sightings.last {
-                let lastCL = CLLocation(
-                    latitude: last.location.latitude,
-                    longitude: last.location.longitude
-                )
-                let newCL = CLLocation(
-                    latitude: location.latitude,
-                    longitude: location.longitude
-                )
+            if let last = scanRecords[index].sightings.last,
+               let lastLoc = last.location,
+               let newLoc = location {
+                let lastCL = CLLocation(latitude: lastLoc.latitude, longitude: lastLoc.longitude)
+                let newCL = CLLocation(latitude: newLoc.latitude, longitude: newLoc.longitude)
                 if lastCL.distance(from: newCL) < Self.minSightingDistanceMeters {
                     let refreshed = Sighting(
                         location: last.location,
@@ -137,7 +132,7 @@ final class ScanViewModel {
             }
             let photoFileName = saveFrameIfNeeded(capturedFrame, plate: plate)
             let sighting = Sighting(
-                location: CodableCoordinate(location),
+                location: codableLocation,
                 date: Date(),
                 photoFileName: photoFileName
             )
@@ -167,7 +162,7 @@ final class ScanViewModel {
         let item = PlateQueueItem(
             plate: plate,
             country: countryCode,
-            location: CodableCoordinate(location),
+            location: codableLocation,
             enqueuedAt: Date(),
             capturedFrameFileName: photoFileName,
             state: .pending
@@ -272,10 +267,10 @@ final class ScanViewModel {
 
     // MARK: - Private
 
-    private func storePlateOnly(plate: String, location: CLLocationCoordinate2D, capturedFrame: UIImage?) {
+    private func storePlateOnly(plate: String, location: CLLocationCoordinate2D?, capturedFrame: UIImage?) {
         let photoFileName = saveFrameIfNeeded(capturedFrame, plate: plate)
         let sighting = Sighting(
-            location: CodableCoordinate(location),
+            location: location.map(CodableCoordinate.init),
             date: Date(),
             photoFileName: photoFileName
         )

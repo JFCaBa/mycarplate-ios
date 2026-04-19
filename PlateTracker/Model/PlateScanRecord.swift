@@ -21,7 +21,8 @@ struct CodableCoordinate: Codable {
 }
 
 struct Sighting: Codable {
-    let location: CodableCoordinate
+    /// nil when Location Services were denied/unavailable at capture time.
+    let location: CodableCoordinate?
     let date: Date
     let photoFileName: String?
     var note: String?
@@ -35,6 +36,6 @@ struct PlateScanRecord: Codable {
     var lastLookupAttempt: Date?
 
     var latestSighting: Sighting? { sightings.last }
-    var latestLocation: CLLocationCoordinate2D? { latestSighting?.location.clCoordinate }
+    var latestLocation: CLLocationCoordinate2D? { latestSighting?.location?.clCoordinate }
     var latestDate: Date? { latestSighting?.date }
 }
