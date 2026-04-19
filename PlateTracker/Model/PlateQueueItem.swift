@@ -11,8 +11,8 @@ extension CodableCoordinate: Equatable {
     }
 }
 
-struct PlateQueueItem: Equatable {
-    enum State: Equatable {
+struct PlateQueueItem: Equatable, Codable {
+    enum State: String, Equatable, Codable {
         case pending
         case processing
     }

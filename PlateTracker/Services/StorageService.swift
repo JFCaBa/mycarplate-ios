@@ -11,6 +11,7 @@ final class StorageService {
 
     private let recordsFileName = "scan_records.json"
     private let photosDirectoryName = "vehicle_photos"
+    private let queueFileName = "lookup_queue.json"
     private let fileManager = FileManager.default
 
     private var documentsDirectory: URL {
@@ -23,6 +24,10 @@ final class StorageService {
 
     private var photosDirectory: URL {
         documentsDirectory.appendingPathComponent(photosDirectoryName)
+    }
+
+    private var queueFileURL: URL {
+        documentsDirectory.appendingPathComponent(queueFileName)
     }
 
     private init() {
@@ -44,6 +49,26 @@ final class StorageService {
         encoder.outputFormatting = .prettyPrinted
         guard let data = try? encoder.encode(records) else { return }
         try? data.write(to: recordsFileURL, options: .atomic)
+    }
+
+    // MARK: - Lookup queue
+
+    func loadQueueItems() -> [PlateQueueItem] {
+        guard let data = try? Data(contentsOf: queueFileURL) else { return [] }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return (try? decoder.decode([PlateQueueItem].self, from: data)) ?? []
+    }
+
+    func saveQueueItems(_ items: [PlateQueueItem]) {
+        if items.isEmpty {
+            try? fileManager.removeItem(at: queueFileURL)
+            return
+        }
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        guard let data = try? encoder.encode(items) else { return }
+        try? data.write(to: queueFileURL, options: .atomic)
     }
 
     // MARK: - Photos

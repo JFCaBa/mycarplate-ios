@@ -24,6 +24,18 @@ final class PlateLookupQueue {
 
     init(fetcher: VehicleFetching) {
         self.fetcher = fetcher
+        // Rehydrate any items left over from a previous run. Items that were
+        // mid-flight (.processing) get reset to .pending so they'll re-dispatch.
+        let persisted = StorageService.shared.loadQueueItems().map { item -> PlateQueueItem in
+            var reset = item
+            if item.state == .processing { reset.state = .pending }
+            return reset
+        }
+        self.items = persisted
+    }
+
+    private func persist() {
+        StorageService.shared.saveQueueItems(items)
     }
 
     func setCompletionHandler(_ handler: @escaping (PlateQueueItem, PlateLookupOutcome) -> Void) {
@@ -38,6 +50,7 @@ final class PlateLookupQueue {
             return false
         }
         items.append(item)
+        persist()
         processNextIfIdle()
         return true
     }
@@ -51,6 +64,7 @@ final class PlateLookupQueue {
         guard let idx = items.firstIndex(where: { $0.plate == plate }) else { return false }
         guard items[idx].state == .pending else { return false }
         items.remove(at: idx)
+        persist()
         return true
     }
 
@@ -62,6 +76,7 @@ final class PlateLookupQueue {
         activeSubscription = nil
         let drained = items
         items.removeAll()
+        persist()
         for item in drained {
             onComplete?(item, .cancelled)
         }
@@ -75,6 +90,7 @@ final class PlateLookupQueue {
         // Find first pending.
         guard let idx = items.firstIndex(where: { $0.state == .pending }) else { return }
         items[idx].state = .processing
+        persist()
         let processing = items[idx]
 
         activeSubscription = fetcher
@@ -102,6 +118,7 @@ final class PlateLookupQueue {
             return
         }
         let item = items.remove(at: idx)
+        persist()
         onComplete?(item, outcome)
         processNextIfIdle()
     }
