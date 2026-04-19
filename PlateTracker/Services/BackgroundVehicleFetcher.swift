@@ -28,8 +28,22 @@ final class BackgroundVehicleFetcher: NSObject {
     private let apiKey = "pl_live_fb11d100809bcb313580bad4801bedd76ca8fc8559d654514e6f01126d50aa15"
 
     /// Set by the queue on app launch. Called on main for every task that
-    /// finishes (success, failure, rate-limit, or network error).
-    var completionHandler: ((_ plate: String, _ outcome: PlateLookupOutcome) -> Void)?
+    /// finishes (success, failure, rate-limit, or network error). Setting
+    /// this drains any outcomes buffered while the handler was nil (e.g. the
+    /// system relaunched us for background events before the queue was up).
+    var completionHandler: ((_ plate: String, _ outcome: PlateLookupOutcome) -> Void)? {
+        didSet {
+            guard let handler = completionHandler, !pendingOutcomes.isEmpty else { return }
+            let drained = pendingOutcomes
+            pendingOutcomes.removeAll()
+            for (plate, outcome) in drained {
+                handler(plate, outcome)
+            }
+        }
+    }
+
+    /// Outcomes that arrived before anyone registered a handler. Drained on set.
+    private var pendingOutcomes: [(String, PlateLookupOutcome)] = []
 
     /// Handed in by AppDelegate when the system relaunches us to deliver
     /// events. Called once all pending events drain.
@@ -86,7 +100,11 @@ final class BackgroundVehicleFetcher: NSObject {
     private func deliver(plate: String, outcome: PlateLookupOutcome) {
         guard !reportedPlates.contains(plate) else { return }
         reportedPlates.insert(plate)
-        completionHandler?(plate, outcome)
+        if let handler = completionHandler {
+            handler(plate, outcome)
+        } else {
+            pendingOutcomes.append((plate, outcome))
+        }
     }
 }
 
