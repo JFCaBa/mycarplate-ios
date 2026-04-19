@@ -75,10 +75,10 @@ final class ScanViewModel {
         let country = selectedCountry
         let plate = PlateValidator.cleanEUBandPrefix(raw, for: country)
 
-        print("[ScanVM] raw=\(raw) plate=\(plate) country=\(country.rawValue) valid=\(PlateValidator.isValid(plate: plate, for: country)) hasLocation=\(currentLocation != nil)")
+//        print("[ScanVM] raw=\(raw) plate=\(plate) country=\(country.rawValue) valid=\(PlateValidator.isValid(plate: plate, for: country)) hasLocation=\(currentLocation != nil)")
 
         guard PlateValidator.isValid(plate: plate, for: country) else {
-            print("[ScanVM] ❌ Not a valid \(country.rawValue) plate: '\(plate)'")
+//            print("[ScanVM] ❌ Not a valid \(country.rawValue) plate: '\(plate)'")
             return
         }
 
@@ -284,6 +284,17 @@ final class ScanViewModel {
     }
 
     private func storeRecord(for item: PlateQueueItem, vehicleData: VehicleData?) {
+        // If the plate already exists (e.g. a prior lookup failed and this
+        // is a retry after re-scan), update in place — don't duplicate rows.
+        if let idx = scanRecords.firstIndex(where: { $0.plate == item.plate }) {
+            scanRecords[idx].vehicleData = vehicleData
+            if vehicleData != nil {
+                scanRecords[idx].lastLookupAttempt = Date()
+            }
+            StorageService.shared.saveRecords(scanRecords)
+            return
+        }
+
         let sighting = Sighting(
             location: item.location,
             date: Date(),
@@ -294,7 +305,13 @@ final class ScanViewModel {
             vehicleData: vehicleData,
             sightings: [sighting]
         )
-        record.lastLookupAttempt = Date()
+        // Mark as attempted only on success (definitive answer). Leaving it
+        // nil on failure/cancelled/rate-limit means a later re-scan can
+        // re-enqueue the lookup — same treatment as a plate captured with
+        // Lookup disabled in Settings.
+        if vehicleData != nil {
+            record.lastLookupAttempt = Date()
+        }
         scanRecords.append(record)
         StorageService.shared.saveRecords(scanRecords)
     }
