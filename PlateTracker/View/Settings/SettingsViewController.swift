@@ -7,6 +7,28 @@ import UIKit
 
 final class SettingsViewController: UITableViewController {
 
+    private enum Section: Int, CaseIterable {
+        case scan = 0
+        case captureArea
+        case storage
+
+        var title: String {
+            switch self {
+            case .scan: return "Scan Preferences"
+            case .captureArea: return "Capture Area"
+            case .storage: return "Storage"
+            }
+        }
+
+        var footer: String? {
+            switch self {
+            case .captureArea:
+                return "How much of the car to capture around the plate, in multiples of plate size. Width is symmetric; above/below adjust the vertical crop independently so you can bias toward the hood or rear."
+            default: return nil
+            }
+        }
+    }
+
     private var scanViewModel: ScanViewModel!
 
     private let countries: [(PlateCountry, String)] = [
@@ -26,6 +48,7 @@ final class SettingsViewController: UITableViewController {
         super.viewDidLoad()
         title = "Settings"
         tableView = UITableView(frame: .zero, style: .insetGrouped)
+        tableView.register(SliderSettingCell.self, forCellReuseIdentifier: SliderSettingCell.reuseIdentifier)
 
         lookupSwitch.isOn = {
             if UserDefaults.standard.object(forKey: "lookupEnabled") == nil { return true }
@@ -36,34 +59,50 @@ final class SettingsViewController: UITableViewController {
 
     // MARK: - Sections
 
-    override func numberOfSections(in tableView: UITableView) -> Int { 2 }
+    override func numberOfSections(in tableView: UITableView) -> Int { Section.allCases.count }
 
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        section == 0 ? 2 : 1
+        switch Section(rawValue: section) {
+        case .scan: return 2
+        case .captureArea: return 3
+        case .storage: return 1
+        case .none: return 0
+        }
     }
 
     override func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
-        section == 0 ? "Scan Preferences" : "Storage"
+        Section(rawValue: section)?.title
+    }
+
+    override func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
+        Section(rawValue: section)?.footer
     }
 
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        if indexPath.section == 0 && indexPath.row == 0 {
-            return countryCell()
-        } else if indexPath.section == 0 && indexPath.row == 1 {
-            return lookupCell()
-        } else {
+        switch Section(rawValue: indexPath.section) {
+        case .scan:
+            return indexPath.row == 0 ? countryCell() : lookupCell()
+        case .captureArea:
+            return captureAreaCell(for: indexPath.row)
+        case .storage:
             return storageCell()
+        case .none:
+            return UITableViewCell()
         }
     }
 
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
-        if indexPath.section == 0 && indexPath.row == 0 {
+        guard let section = Section(rawValue: indexPath.section) else { return }
+        switch section {
+        case .scan where indexPath.row == 0:
             showCountryPicker()
-        } else if indexPath.section == 1 {
+        case .storage:
             let storageVC = StorageViewController()
             storageVC.configure(with: scanViewModel)
             navigationController?.pushViewController(storageVC, animated: true)
+        default:
+            break
         }
     }
 
@@ -93,6 +132,40 @@ final class SettingsViewController: UITableViewController {
         cell.detailTextLabel?.textColor = .secondaryLabel
         cell.accessoryView = lookupSwitch
         cell.selectionStyle = .none
+        return cell
+    }
+
+    private func captureAreaCell(for row: Int) -> UITableViewCell {
+        let cell = tableView.dequeueReusableCell(withIdentifier: SliderSettingCell.reuseIdentifier) as! SliderSettingCell
+        cell.selectionStyle = .none
+        switch row {
+        case 0:
+            cell.configure(
+                title: "Width",
+                range: ScanCropConfig.widthRange,
+                value: Float(ScanCropConfig.width),
+                formatter: { String(format: "%.1f×", $0) }
+            )
+            cell.onChange = { ScanCropConfig.setWidth(CGFloat($0)) }
+        case 1:
+            cell.configure(
+                title: "Above plate",
+                range: ScanCropConfig.aboveRange,
+                value: Float(ScanCropConfig.above),
+                formatter: { String(format: "%.1f×", $0) }
+            )
+            cell.onChange = { ScanCropConfig.setAbove(CGFloat($0)) }
+        case 2:
+            cell.configure(
+                title: "Below plate",
+                range: ScanCropConfig.belowRange,
+                value: Float(ScanCropConfig.below),
+                formatter: { String(format: "%.1f×", $0) }
+            )
+            cell.onChange = { ScanCropConfig.setBelow(CGFloat($0)) }
+        default:
+            break
+        }
         return cell
     }
 
@@ -126,5 +199,78 @@ final class SettingsViewController: UITableViewController {
 
     @objc private func lookupToggled() {
         UserDefaults.standard.set(lookupSwitch.isOn, forKey: "lookupEnabled")
+    }
+}
+
+// MARK: - SliderSettingCell
+
+final class SliderSettingCell: UITableViewCell {
+
+    static let reuseIdentifier = "SliderSettingCell"
+
+    private let titleLabel: UILabel = {
+        let l = UILabel()
+        l.font = .preferredFont(forTextStyle: .body)
+        return l
+    }()
+
+    private let valueLabel: UILabel = {
+        let l = UILabel()
+        l.font = .monospacedDigitSystemFont(ofSize: UIFont.systemFontSize, weight: .semibold)
+        l.textColor = .secondaryLabel
+        l.textAlignment = .right
+        return l
+    }()
+
+    private let slider = UISlider()
+    var onChange: ((Float) -> Void)?
+    private var formatter: ((Float) -> String)?
+
+    override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
+        super.init(style: style, reuseIdentifier: reuseIdentifier)
+        setupViews()
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    private func setupViews() {
+        let topRow = UIStackView(arrangedSubviews: [titleLabel, valueLabel])
+        topRow.axis = .horizontal
+        topRow.distribution = .fill
+        topRow.alignment = .firstBaseline
+
+        let stack = UIStackView(arrangedSubviews: [topRow, slider])
+        stack.axis = .vertical
+        stack.spacing = 6
+
+        contentView.addSubview(stack)
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 10),
+            stack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -10),
+            stack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            stack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+        ])
+
+        slider.addTarget(self, action: #selector(sliderChanged), for: .valueChanged)
+    }
+
+    func configure(title: String,
+                   range: ClosedRange<Float>,
+                   value: Float,
+                   formatter: @escaping (Float) -> String) {
+        titleLabel.text = title
+        slider.minimumValue = range.lowerBound
+        slider.maximumValue = range.upperBound
+        slider.value = value
+        self.formatter = formatter
+        valueLabel.text = formatter(value)
+    }
+
+    @objc private func sliderChanged() {
+        // Snap to 0.1 increments for tactile control.
+        let snapped = (slider.value * 10).rounded() / 10
+        slider.value = snapped
+        valueLabel.text = formatter?(snapped) ?? String(snapped)
+        onChange?(snapped)
     }
 }

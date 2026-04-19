@@ -24,10 +24,18 @@ final class ScanViewController: UIViewController {
     private var lastPhotoCaptureAt: Date?
     private let photoCaptureInterval: TimeInterval = 1.0
 
-    // Crop expansion around the plate's bounding box (multiples of the plate size).
-    // ~3–4× keeps the car body in frame while dropping sky/road.
-    private let plateCropWidthMultiplier: CGFloat = 4.0
-    private let plateCropHeightMultiplier: CGFloat = 3.5
+    // Live preview overlay showing the crop region that would be captured for
+    // the currently-detected plate. Tunable via ScanCropConfig.
+    private let cropOverlay: CAShapeLayer = {
+        let layer = CAShapeLayer()
+        layer.strokeColor = UIColor.systemYellow.cgColor
+        layer.fillColor = UIColor.clear.cgColor
+        layer.lineWidth = 2
+        layer.lineDashPattern = [8, 4]
+        layer.opacity = 0
+        return layer
+    }()
+    private var hideOverlayTask: DispatchWorkItem?
 
     private let plateLabel: UILabel = {
         let label = UILabel()
@@ -61,6 +69,7 @@ final class ScanViewController: UIViewController {
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         previewLayer?.frame = view.layer.bounds
+        cropOverlay.frame = view.layer.bounds
     }
 
     private func setupPlateLabel() {
@@ -160,6 +169,8 @@ final class ScanViewController: UIViewController {
         previewLayer.frame = view.layer.bounds
         previewLayer.videoGravity = .resizeAspectFill
         view.layer.addSublayer(previewLayer)
+        previewLayer.addSublayer(cropOverlay)
+        cropOverlay.frame = previewLayer.bounds
 
         DispatchQueue(label: "cameraQueue").async { [weak self] in
             self?.captureSession.startRunning()
@@ -178,14 +189,15 @@ extension ScanViewController: AVCaptureVideoDataOutputSampleBufferDelegate {
             }
             guard let results = request.results as? [VNRecognizedTextObservation] else { return }
 
-            let hasConfidentText = results.contains { obs in
+            let confidentBox = results.first { obs in
                 guard obs.confidence >= 0.8,
                       let cand = obs.topCandidates(1).first else { return false }
                 return cand.confidence >= 0.8
-            }
-            guard hasConfidentText else { return }
+            }?.boundingBox
+            guard let confidentBox = confidentBox else { return }
 
             DispatchQueue.main.async {
+                self?.updateCropOverlay(normalizedBox: confidentBox)
                 self?.triggerPhotoCaptureIfNeeded()
             }
         }
@@ -296,13 +308,18 @@ extension ScanViewController: AVCapturePhotoCaptureDelegate {
         let absX = normalizedBox.origin.x * size.width
         let absY = size.height - (normalizedBox.origin.y * size.height) - absH
 
+        let widthMult = ScanCropConfig.width
+        let above = ScanCropConfig.above
+        let below = ScanCropConfig.below
+
+        let cropW = min(absW * widthMult, size.width)
+        let cropH = min(absH * (1 + above + below), size.height)
         let centerX = absX + absW / 2
-        let centerY = absY + absH / 2
-        let cropW = min(absW * plateCropWidthMultiplier, size.width)
-        let cropH = min(absH * plateCropHeightMultiplier, size.height)
+        // Top of crop sits `above × plateH` above the plate's top edge.
+        let topY = absY - absH * above
 
         var cropRect = CGRect(x: centerX - cropW / 2,
-                              y: centerY - cropH / 2,
+                              y: topY,
                               width: cropW,
                               height: cropH)
         if cropRect.minX < 0 { cropRect.origin.x = 0 }
@@ -314,6 +331,47 @@ extension ScanViewController: AVCapturePhotoCaptureDelegate {
         return renderer.image { _ in
             image.draw(at: CGPoint(x: -cropRect.minX, y: -cropRect.minY))
         }
+    }
+
+    // MARK: - Live crop overlay
+
+    private func updateCropOverlay(normalizedBox: CGRect) {
+        // Vision uses bottom-left normalized coords;
+        // layerRectConverted(fromMetadataOutputRect:) expects top-left.
+        let flipped = CGRect(
+            x: normalizedBox.origin.x,
+            y: 1 - normalizedBox.origin.y - normalizedBox.height,
+            width: normalizedBox.width,
+            height: normalizedBox.height
+        )
+        let plateRect = previewLayer.layerRectConverted(fromMetadataOutputRect: flipped)
+        let widthMult = ScanCropConfig.width
+        let above = ScanCropConfig.above
+        let below = ScanCropConfig.below
+
+        let cropRect = CGRect(
+            x: plateRect.midX - plateRect.width * widthMult / 2,
+            y: plateRect.minY - plateRect.height * above,
+            width: plateRect.width * widthMult,
+            height: plateRect.height * (1 + above + below)
+        ).intersection(previewLayer.bounds)
+
+        // CAShapeLayer implicit animation on path/opacity would lag; disable it.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        cropOverlay.path = UIBezierPath(rect: cropRect).cgPath
+        cropOverlay.opacity = 1
+        CATransaction.commit()
+
+        hideOverlayTask?.cancel()
+        let task = DispatchWorkItem { [weak self] in
+            CATransaction.begin()
+            CATransaction.setAnimationDuration(0.3)
+            self?.cropOverlay.opacity = 0
+            CATransaction.commit()
+        }
+        hideOverlayTask = task
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: task)
     }
 }
 
