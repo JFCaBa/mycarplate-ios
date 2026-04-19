@@ -34,7 +34,7 @@ final class ScanViewModel {
     }
 
     init() {
-        self.lookupQueue = PlateLookupQueue(fetcher: NetworkService.shared)
+        self.lookupQueue = PlateLookupQueue()
         self.scanRecords = StorageService.shared.loadRecords()
 
         lookupQueue.setCompletionHandler { [weak self] item, outcome in

@@ -4,7 +4,6 @@
 //
 
 import Foundation
-import Combine
 
 enum PlateLookupOutcome {
     case success(VehicleData)
@@ -18,20 +17,25 @@ final class PlateLookupQueue {
 
     @Published private(set) var items: [PlateQueueItem] = []
 
-    private let fetcher: VehicleFetching
     private var onComplete: ((PlateQueueItem, PlateLookupOutcome) -> Void)?
-    private var activeSubscription: AnyCancellable?
+    private var isDispatching = false
 
-    init(fetcher: VehicleFetching) {
-        self.fetcher = fetcher
+    init() {
         // Rehydrate any items left over from a previous run. Items that were
-        // mid-flight (.processing) get reset to .pending so they'll re-dispatch.
+        // mid-flight (.processing) are reset to .pending so they re-dispatch:
+        // a background URLSession task may have finished while the app was
+        // dead, but we can't trust the outcome reached us — safest to retry.
         let persisted = StorageService.shared.loadQueueItems().map { item -> PlateQueueItem in
             var reset = item
             if item.state == .processing { reset.state = .pending }
             return reset
         }
         self.items = persisted
+
+        // Route BackgroundVehicleFetcher callbacks back into the queue.
+        BackgroundVehicleFetcher.shared.completionHandler = { [weak self] plate, outcome in
+            self?.finishCurrent(plate: plate, outcome: outcome)
+        }
     }
 
     private func persist() {
@@ -68,12 +72,13 @@ final class PlateLookupQueue {
         return true
     }
 
-    /// Called on app termination. Cancels the in-flight subscription and
-    /// emits `.cancelled` for every remaining item so callers can persist
-    /// plate-only records.
+    /// Called on app termination. Clears every remaining item and emits
+    /// `.cancelled` for each so callers can persist plate-only records.
+    /// Tasks already handed to the background URLSession continue to run
+    /// in the system; their eventual completion hits `finishCurrent` and
+    /// no-ops because the plate is no longer in `items`.
     func flushAllToFallback() {
-        activeSubscription?.cancel()
-        activeSubscription = nil
+        isDispatching = false
         let drained = items
         items.removeAll()
         persist()
@@ -85,32 +90,17 @@ final class PlateLookupQueue {
     // MARK: - Private
 
     private func processNextIfIdle() {
-        // Already processing something?
-        guard activeSubscription == nil else { return }
-        // Find first pending.
+        guard !isDispatching else { return }
         guard let idx = items.firstIndex(where: { $0.state == .pending }) else { return }
         items[idx].state = .processing
         persist()
         let processing = items[idx]
-
-        activeSubscription = fetcher
-            .fetchVehicle(plate: processing.plate, country: processing.country)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { [weak self] completion in
-                    guard let self = self else { return }
-                    if case .failure(let error) = completion {
-                        self.finishCurrent(plate: processing.plate, outcome: self.outcome(for: error))
-                    }
-                },
-                receiveValue: { [weak self] vehicleData in
-                    self?.finishCurrent(plate: processing.plate, outcome: .success(vehicleData))
-                }
-            )
+        isDispatching = true
+        BackgroundVehicleFetcher.shared.dispatch(plate: processing.plate, country: processing.country)
     }
 
     private func finishCurrent(plate: String, outcome: PlateLookupOutcome) {
-        activeSubscription = nil
+        isDispatching = false
         guard let idx = items.firstIndex(where: { $0.plate == plate }) else {
             // Item already removed (e.g., via flushAllToFallback). Don't
             // double-report.
@@ -121,12 +111,5 @@ final class PlateLookupQueue {
         persist()
         onComplete?(item, outcome)
         processNextIfIdle()
-    }
-
-    private func outcome(for error: NetworkError) -> PlateLookupOutcome {
-        if case .rateLimited(let seconds) = error {
-            return .rateLimited(retryAfterSeconds: seconds)
-        }
-        return .failure
     }
 }
