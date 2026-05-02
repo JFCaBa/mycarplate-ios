@@ -9,12 +9,14 @@ final class SettingsViewController: UITableViewController {
 
     private enum Section: Int, CaseIterable {
         case scan = 0
+        case recognition
         case captureArea
         case storage
 
         var title: String {
             switch self {
             case .scan: return "Scan Preferences"
+            case .recognition: return "Recognition"
             case .captureArea: return "Capture Area"
             case .storage: return "Storage"
             }
@@ -22,6 +24,8 @@ final class SettingsViewController: UITableViewController {
 
         var footer: String? {
             switch self {
+            case .recognition:
+                return "Minimum confidence required to accept a plate. Lower values trigger captures more often but may produce false reads; higher values are stricter but slower to fire."
             case .captureArea:
                 return "How much of the car to capture around the plate, in multiples of plate size. Width is symmetric; above/below adjust the vertical crop independently so you can bias toward the hood or rear."
             default: return nil
@@ -64,6 +68,7 @@ final class SettingsViewController: UITableViewController {
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         switch Section(rawValue: section) {
         case .scan: return 2
+        case .recognition: return 1
         case .captureArea: return 3
         case .storage: return 1
         case .none: return 0
@@ -82,6 +87,8 @@ final class SettingsViewController: UITableViewController {
         switch Section(rawValue: indexPath.section) {
         case .scan:
             return indexPath.row == 0 ? countryCell() : lookupCell()
+        case .recognition:
+            return recognitionCell()
         case .captureArea:
             return captureAreaCell(for: indexPath.row)
         case .storage:
@@ -132,6 +139,20 @@ final class SettingsViewController: UITableViewController {
         cell.detailTextLabel?.textColor = .secondaryLabel
         cell.accessoryView = lookupSwitch
         cell.selectionStyle = .none
+        return cell
+    }
+
+    private func recognitionCell() -> UITableViewCell {
+        let cell = tableView.dequeueReusableCell(withIdentifier: SliderSettingCell.reuseIdentifier) as! SliderSettingCell
+        cell.selectionStyle = .none
+        cell.configure(
+            title: "Confidence",
+            range: ScanRecognitionConfig.confidenceRange,
+            value: ScanRecognitionConfig.confidence,
+            step: 0.05,
+            formatter: { String(format: "%.2f", $0) }
+        )
+        cell.onChange = { ScanRecognitionConfig.setConfidence($0) }
         return cell
     }
 
@@ -225,6 +246,7 @@ final class SliderSettingCell: UITableViewCell {
     private let slider = UISlider()
     var onChange: ((Float) -> Void)?
     private var formatter: ((Float) -> String)?
+    private var step: Float = 0.1
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -257,18 +279,21 @@ final class SliderSettingCell: UITableViewCell {
     func configure(title: String,
                    range: ClosedRange<Float>,
                    value: Float,
+                   step: Float = 0.1,
                    formatter: @escaping (Float) -> String) {
         titleLabel.text = title
         slider.minimumValue = range.lowerBound
         slider.maximumValue = range.upperBound
         slider.value = value
+        self.step = step
         self.formatter = formatter
         valueLabel.text = formatter(value)
     }
 
     @objc private func sliderChanged() {
-        // Snap to 0.1 increments for tactile control.
-        let snapped = (slider.value * 10).rounded() / 10
+        // Snap to the configured step for tactile control.
+        let s = max(step, 0.001)
+        let snapped = (slider.value / s).rounded() * s
         slider.value = snapped
         valueLabel.text = formatter?(snapped) ?? String(snapped)
         onChange?(snapped)

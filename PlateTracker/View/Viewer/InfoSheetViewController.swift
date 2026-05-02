@@ -25,6 +25,23 @@ final class InfoSheetViewController: UIViewController {
     }()
     private let tableView = UITableView(frame: .zero, style: .insetGrouped)
 
+    private let fetchDetailsButton: UIButton = {
+        var config = UIButton.Configuration.filled()
+        config.title = "Fetch Details"
+        config.image = UIImage(systemName: "arrow.down.circle")
+        config.imagePadding = 8
+        config.cornerStyle = .medium
+        let b = UIButton(configuration: config)
+        return b
+    }()
+    private lazy var fetchContainer: UIStackView = {
+        let s = UIStackView(arrangedSubviews: [fetchDetailsButton])
+        s.axis = .horizontal
+        s.alignment = .center
+        s.distribution = .fill
+        return s
+    }()
+
     private var subscriptions = Set<AnyCancellable>()
 
     init(plate: String, scanViewModel: ScanViewModel) {
@@ -44,10 +61,14 @@ final class InfoSheetViewController: UIViewController {
     }
 
     private func setupViews() {
-        view.addSubview(mapView)
+        let topStack = UIStackView(arrangedSubviews: [mapView, fetchContainer])
+        topStack.axis = .vertical
+        topStack.spacing = 8
+
+        view.addSubview(topStack)
         view.addSubview(mapEmptyLabel)
         view.addSubview(tableView)
-        for v in [mapView, mapEmptyLabel, tableView] {
+        for v in [topStack, mapEmptyLabel, tableView] {
             v.translatesAutoresizingMaskIntoConstraints = false
         }
         mapView.layer.cornerRadius = 12
@@ -55,22 +76,41 @@ final class InfoSheetViewController: UIViewController {
         mapView.isUserInteractionEnabled = false
 
         tableView.dataSource = self
+        tableView.delegate = self
+        tableView.rowHeight = UITableView.automaticDimension
+        tableView.estimatedRowHeight = 56
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: "metadata")
 
+        fetchDetailsButton.addTarget(self, action: #selector(fetchDetailsTapped), for: .touchUpInside)
+        // Hidden by default; shown only when there's no vehicleData yet.
+        fetchContainer.isHidden = true
+
         NSLayoutConstraint.activate([
-            mapView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 14),
-            mapView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 14),
-            mapView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -14),
+            topStack.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 14),
+            topStack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 14),
+            topStack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -14),
+
             mapView.heightAnchor.constraint(equalToConstant: 140),
 
             mapEmptyLabel.centerXAnchor.constraint(equalTo: mapView.centerXAnchor),
             mapEmptyLabel.centerYAnchor.constraint(equalTo: mapView.centerYAnchor),
 
-            tableView.topAnchor.constraint(equalTo: mapView.bottomAnchor, constant: 8),
+            tableView.topAnchor.constraint(equalTo: topStack.bottomAnchor, constant: 8),
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
+    }
+
+    @objc private func fetchDetailsTapped() {
+        detailViewModel.refresh()
+    }
+
+    private func updateFetchVisibility() {
+        let shouldShow = !detailViewModel.hasVehicleData
+        if fetchContainer.isHidden == shouldShow {
+            fetchContainer.isHidden = !shouldShow
+        }
     }
 
     private func renderMap() {
@@ -104,12 +144,38 @@ final class InfoSheetViewController: UIViewController {
     private func bind() {
         detailViewModel.$sections
             .receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.tableView.reloadData() }
+            .sink { [weak self] _ in
+                self?.tableView.reloadData()
+                self?.updateFetchVisibility()
+            }
             .store(in: &subscriptions)
+
+        detailViewModel.$isRefreshing
+            .receive(on: RunLoop.main)
+            .sink { [weak self] busy in
+                guard let self = self else { return }
+                self.fetchDetailsButton.isEnabled = !busy
+                self.fetchDetailsButton.configuration?.showsActivityIndicator = busy
+            }
+            .store(in: &subscriptions)
+
+        detailViewModel.$lastFetchError
+            .receive(on: RunLoop.main)
+            .compactMap { $0 }
+            .sink { [weak self] message in
+                self?.presentFetchError(message)
+            }
+            .store(in: &subscriptions)
+    }
+
+    private func presentFetchError(_ message: String) {
+        let alert = UIAlertController(title: "Fetch failed", message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
     }
 }
 
-extension InfoSheetViewController: UITableViewDataSource {
+extension InfoSheetViewController: UITableViewDataSource, UITableViewDelegate {
     func numberOfSections(in tableView: UITableView) -> Int {
         detailViewModel.sections.count
     }
@@ -120,11 +186,65 @@ extension InfoSheetViewController: UITableViewDataSource {
         detailViewModel.sections[section].rows.count
     }
     func tableView(_ tv: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let row = detailViewModel.sections[indexPath.section].rows[indexPath.row]
-        let cell = UITableViewCell(style: .value1, reuseIdentifier: "metadata")
+        let section = detailViewModel.sections[indexPath.section]
+        let row = section.rows[indexPath.row]
+        let style: UITableViewCell.CellStyle = section.multiline ? .subtitle : .value1
+        let cell = UITableViewCell(style: style, reuseIdentifier: nil)
         cell.textLabel?.text = row.label
         cell.detailTextLabel?.text = row.value
-        cell.selectionStyle = .none
+        if section.multiline {
+            cell.textLabel?.numberOfLines = 0
+            cell.detailTextLabel?.numberOfLines = 0
+            cell.detailTextLabel?.textColor = .secondaryLabel
+        }
+        if row.coordinate != nil {
+            cell.accessoryType = .disclosureIndicator
+            cell.selectionStyle = .default
+        } else {
+            cell.accessoryType = .none
+            cell.selectionStyle = .none
+        }
         return cell
+    }
+
+    func tableView(_ tv: UITableView, didSelectRowAt indexPath: IndexPath) {
+        tv.deselectRow(at: indexPath, animated: true)
+        let row = detailViewModel.sections[indexPath.section].rows[indexPath.row]
+        guard let coord = row.coordinate else { return }
+        focusMap(on: coord)
+    }
+
+    private func focusMap(on coordinate: CLLocationCoordinate2D) {
+        // Walk up to the root tab bar, dismiss any modally presented stack
+        // (this sheet, the photo viewer above it), then switch to the Map tab
+        // and ask it to center on the chosen coordinate.
+        guard let window = view.window,
+              let tabBar = window.rootViewController as? UITabBarController else { return }
+
+        let mapTabIndex = (tabBar.viewControllers ?? []).firstIndex { vc in
+            (vc as? UINavigationController)?.viewControllers.first is MapViewController
+                || vc is MapViewController
+        }
+        guard let mapIndex = mapTabIndex else { return }
+
+        let mapVC: MapViewController? = {
+            let target = tabBar.viewControllers?[mapIndex]
+            if let nav = target as? UINavigationController {
+                nav.popToRootViewController(animated: false)
+                return nav.viewControllers.first as? MapViewController
+            }
+            return target as? MapViewController
+        }()
+
+        let activate = {
+            tabBar.selectedIndex = mapIndex
+            mapVC?.centerOn(coordinate: coordinate)
+        }
+
+        if tabBar.presentedViewController != nil {
+            tabBar.dismiss(animated: true, completion: activate)
+        } else {
+            activate()
+        }
     }
 }

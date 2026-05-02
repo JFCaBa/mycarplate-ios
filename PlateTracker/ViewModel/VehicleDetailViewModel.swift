@@ -5,15 +5,23 @@
 
 import Foundation
 import Combine
+import CoreLocation
 
 struct DetailRow {
     let label: String
     let value: String
+    /// Set on Sightings rows that have a known location, so the view can make
+    /// the row tappable and jump to the Map tab centered on this coordinate.
+    var coordinate: CLLocationCoordinate2D? = nil
 }
 
 struct DetailSection {
     let title: String
     let rows: [DetailRow]
+    /// When true, the view should render each row in a multi-line subtitle
+    /// layout (label on top, value wrapped below) instead of the compact
+    /// single-line value1 style. Used for sightings and base7 options.
+    var multiline: Bool = false
 }
 
 @MainActor
@@ -21,6 +29,7 @@ final class VehicleDetailViewModel {
 
     @Published private(set) var sections: [DetailSection] = []
     @Published private(set) var isRefreshing = false
+    @Published private(set) var lastFetchError: String?
 
     let plate: String
     var country: String {
@@ -29,6 +38,7 @@ final class VehicleDetailViewModel {
             ?? "ES"
     }
     var latestPhotoFileName: String? { record?.sightings.last?.photoFileName }
+    var hasVehicleData: Bool { record?.vehicleData != nil }
 
     private var record: PlateScanRecord? {
         scanViewModel.scanRecords.first { $0.plate == plate }
@@ -61,9 +71,15 @@ final class VehicleDetailViewModel {
     }
 
     func refresh() {
+        guard !isRefreshing else { return }
         isRefreshing = true
-        scanViewModel.refreshVehicleData(for: plate) { [weak self] _ in
-            self?.isRefreshing = false
+        lastFetchError = nil
+        scanViewModel.refreshVehicleData(for: plate) { [weak self] success in
+            guard let self = self else { return }
+            self.isRefreshing = false
+            if !success {
+                self.lastFetchError = "Couldn't fetch vehicle details. Check your connection and try again."
+            }
         }
     }
 
@@ -135,12 +151,21 @@ final class VehicleDetailViewModel {
             // Identifiers
             let idRows: [DetailRow] = [
                 v.base7Code.map { DetailRow(label: "Base7 Code", value: $0) },
-                v.base7CodeOptions.map { DetailRow(label: "Base7 Options", value: $0.joined(separator: ", ")) },
                 v.source.map { DetailRow(label: "Source", value: $0) },
                 v.confidence.map { DetailRow(label: "Confidence", value: String(format: "%.0f%%", $0 * 100)) },
             ].compactMap { $0 }
             if !idRows.isEmpty {
                 allSections.append(DetailSection(title: "Metadata", rows: idRows))
+            }
+
+            // Base7 Options — one row per option, like sightings.
+            if let options = v.base7CodeOptions, !options.isEmpty {
+                let optionRows = options.map { DetailRow(label: $0, value: "") }
+                allSections.append(DetailSection(
+                    title: "Base7 Options (\(options.count))",
+                    rows: optionRows,
+                    multiline: true
+                ))
             }
         }
 
@@ -149,18 +174,19 @@ final class VehicleDetailViewModel {
         dateFormatter.dateStyle = .medium
         dateFormatter.timeStyle = .short
         let sightingRows = record.sightings.reversed().map { sighting -> DetailRow in
-            let value: String
+            let label = dateFormatter.string(from: sighting.date)
             if let loc = sighting.location {
-                value = String(format: "%.4f, %.4f", loc.latitude, loc.longitude)
+                let value = String(format: "%.5f, %.5f", loc.latitude, loc.longitude)
+                return DetailRow(label: label, value: value, coordinate: loc.clCoordinate)
             } else {
-                value = "No location"
+                return DetailRow(label: label, value: "No location")
             }
-            return DetailRow(label: dateFormatter.string(from: sighting.date), value: value)
         }
         if !sightingRows.isEmpty {
             allSections.append(DetailSection(
                 title: "Sightings (\(record.sightings.count))",
-                rows: sightingRows
+                rows: sightingRows,
+                multiline: true
             ))
         }
 
