@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		82C308912FA66AED00EF1991 /* SDWebImageSVGCoder in Frameworks */ = {isa = PBXBuildFile; productRef = 82C308902FA66AED00EF1991 /* SDWebImageSVGCoder */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		82875F052F93670E007A01D2 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +56,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				82C308912FA66AED00EF1991 /* SDWebImageSVGCoder in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -103,6 +108,7 @@
 			);
 			name = PlateTracker;
 			packageProductDependencies = (
+				82C308902FA66AED00EF1991 /* SDWebImageSVGCoder */,
 			);
 			productName = PlateTracker;
 			productReference = 821EE64B2E2E2797009C620D /* PlateTracker.app */;
@@ -159,6 +165,9 @@
 			);
 			mainGroup = 821EE6422E2E2797009C620D;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				82C3088F2FA66AED00EF1991 /* XCRemoteSwiftPackageReference "SDWebImageSVGCoder" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 821EE64C2E2E2797009C620D /* Products */;
 			projectDirPath = "";
@@ -219,7 +228,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = JH8NFJ6XW7;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PlateTracker/Info.plist;
@@ -249,7 +258,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = JH8NFJ6XW7;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PlateTracker/Info.plist;
@@ -467,6 +476,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		82C3088F2FA66AED00EF1991 /* XCRemoteSwiftPackageReference "SDWebImageSVGCoder" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/SDWebImage/SDWebImageSVGCoder.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.8.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		82C308902FA66AED00EF1991 /* SDWebImageSVGCoder */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 82C3088F2FA66AED00EF1991 /* XCRemoteSwiftPackageReference "SDWebImageSVGCoder" */;
+			productName = SDWebImageSVGCoder;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 821EE6432E2E2797009C620D /* Project object */;
 }

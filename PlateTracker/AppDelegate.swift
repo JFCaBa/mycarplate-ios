@@ -6,12 +6,15 @@
 //
 
 import UIKit
+import SDWebImage
+import SDWebImageSVGCoder
 
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
 
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        SDImageCodersManager.shared.addCoder(SDImageSVGCoder.shared)
         // Eagerly create the URLSession.background instance so its delegate
         // is live before iOS delivers any pending events on a relaunch.
         BackgroundVehicleFetcher.shared.bootstrap()

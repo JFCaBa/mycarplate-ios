@@ -6,12 +6,54 @@
 import UIKit
 import MapKit
 import Combine
+import SDWebImage
 
 final class InfoSheetViewController: UIViewController {
 
     private let plate: String
     private let scanViewModel: ScanViewModel
     private let detailViewModel: VehicleDetailViewModel
+
+    private let brandLogoView: UIImageView = {
+        let iv = UIImageView()
+        iv.contentMode = .scaleAspectFit
+        iv.clipsToBounds = true
+        iv.isHidden = true
+        return iv
+    }()
+    private let plateLabel: UILabel = {
+        let l = UILabel()
+        l.font = .preferredFont(forTextStyle: .headline)
+        l.adjustsFontForContentSizeCategory = true
+        l.numberOfLines = 1
+        return l
+    }()
+    private let subtitleLabel: UILabel = {
+        let l = UILabel()
+        l.font = .preferredFont(forTextStyle: .subheadline)
+        l.adjustsFontForContentSizeCategory = true
+        l.textColor = .secondaryLabel
+        l.numberOfLines = 1
+        return l
+    }()
+    private let envLabelView: UIImageView = {
+        let iv = UIImageView()
+        iv.contentMode = .scaleAspectFit
+        iv.clipsToBounds = true
+        iv.isHidden = true
+        iv.isAccessibilityElement = true
+        return iv
+    }()
+    private lazy var headerStack: UIStackView = {
+        let titleStack = UIStackView(arrangedSubviews: [plateLabel, subtitleLabel])
+        titleStack.axis = .vertical
+        titleStack.spacing = 2
+        let s = UIStackView(arrangedSubviews: [brandLogoView, titleStack, envLabelView])
+        s.axis = .horizontal
+        s.alignment = .center
+        s.spacing = 12
+        return s
+    }()
 
     private let mapView = MKMapView()
     private let mapEmptyLabel: UILabel = {
@@ -56,14 +98,15 @@ final class InfoSheetViewController: UIViewController {
         super.viewDidLoad()
         view.backgroundColor = .systemBackground
         setupViews()
+        renderHeader()
         renderMap()
         bind()
     }
 
     private func setupViews() {
-        let topStack = UIStackView(arrangedSubviews: [mapView, fetchContainer])
+        let topStack = UIStackView(arrangedSubviews: [headerStack, mapView, fetchContainer])
         topStack.axis = .vertical
-        topStack.spacing = 8
+        topStack.spacing = 12
 
         view.addSubview(topStack)
         view.addSubview(mapEmptyLabel)
@@ -85,10 +128,17 @@ final class InfoSheetViewController: UIViewController {
         // Hidden by default; shown only when there's no vehicleData yet.
         fetchContainer.isHidden = true
 
+        plateLabel.text = plate
+
         NSLayoutConstraint.activate([
             topStack.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 14),
             topStack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 14),
             topStack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -14),
+
+            brandLogoView.widthAnchor.constraint(equalToConstant: 44),
+            brandLogoView.heightAnchor.constraint(equalToConstant: 44),
+            envLabelView.widthAnchor.constraint(equalToConstant: 44),
+            envLabelView.heightAnchor.constraint(equalToConstant: 44),
 
             mapView.heightAnchor.constraint(equalToConstant: 140),
 
@@ -100,6 +150,31 @@ final class InfoSheetViewController: UIViewController {
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
+    }
+
+    private func renderHeader() {
+        plateLabel.text = plate
+        let subtitle = detailViewModel.headerSubtitle
+        subtitleLabel.text = subtitle
+        subtitleLabel.isHidden = subtitle.isEmpty
+
+        if let url = detailViewModel.brandLogoURL {
+            brandLogoView.isHidden = false
+            brandLogoView.sd_setImage(with: url, placeholderImage: nil)
+        } else {
+            brandLogoView.isHidden = true
+            brandLogoView.image = nil
+        }
+
+        if let env = detailViewModel.envLabel {
+            envLabelView.isHidden = false
+            envLabelView.accessibilityLabel = "DGT environmental label \(env.code)"
+            envLabelView.sd_setImage(with: env.url, placeholderImage: nil)
+        } else {
+            envLabelView.isHidden = true
+            envLabelView.image = nil
+            envLabelView.accessibilityLabel = nil
+        }
     }
 
     @objc private func fetchDetailsTapped() {
@@ -147,6 +222,7 @@ final class InfoSheetViewController: UIViewController {
             .sink { [weak self] _ in
                 self?.tableView.reloadData()
                 self?.updateFetchVisibility()
+                self?.renderHeader()
             }
             .store(in: &subscriptions)
 

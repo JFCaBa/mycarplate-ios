@@ -40,6 +40,13 @@ struct VehicleData: Codable {
     let source: String?
     let confidence: Double?
     let immoPin: String?
+    let envLabelCode: String?
+    let envLabelImageUrl: String?
+    let brandLogoUrl: String?
+    let bodyClass: String?
+    let driveType: String?
+    let transmission: String?
+    let mileage: Int?
 }
 
 struct ApiResponse: Decodable {

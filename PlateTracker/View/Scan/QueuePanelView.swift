@@ -96,8 +96,12 @@ private final class QueueRowCell: UITableViewCell {
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
-        backgroundColor = .clear
+        var clearBackground = UIBackgroundConfiguration.clear()
+        clearBackground.backgroundColor = .clear
+        backgroundConfiguration = clearBackground
         contentView.backgroundColor = .clear
+        selectedBackgroundView = UIView()
+        selectedBackgroundView?.backgroundColor = UIColor.white.withAlphaComponent(0.08)
 
         plateLabel.translatesAutoresizingMaskIntoConstraints = false
         plateLabel.textColor = .white
@@ -129,6 +133,7 @@ private final class QueueRowCell: UITableViewCell {
 
     func configure(with item: PlateQueueItem) {
         plateLabel.text = item.plate
+        selectionStyle = item.state == .pending ? .default : .none
         switch item.state {
         case .processing:
             pendingIcon.isHidden = true

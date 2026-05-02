@@ -40,6 +40,33 @@ final class VehicleDetailViewModel {
     var latestPhotoFileName: String? { record?.sightings.last?.photoFileName }
     var hasVehicleData: Bool { record?.vehicleData != nil }
 
+    var brandLogoURL: URL? { Self.absoluteImageURL(record?.vehicleData?.brandLogoUrl) }
+    var envLabel: (url: URL, code: String)? {
+        guard let v = record?.vehicleData,
+              let code = v.envLabelCode,
+              let url = Self.absoluteImageURL(v.envLabelImageUrl)
+        else { return nil }
+        return (url, code)
+    }
+    var headerSubtitle: String {
+        let v = record?.vehicleData
+        let parts: [String] = [
+            v?.make,
+            v?.model,
+            v?.year.map(String.init)
+        ].compactMap { $0 }.filter { !$0.isEmpty }
+        return parts.joined(separator: " · ")
+    }
+
+    private static func absoluteImageURL(_ path: String?) -> URL? {
+        guard let path = path, !path.isEmpty else { return nil }
+        if path.hasPrefix("http://") || path.hasPrefix("https://") {
+            return URL(string: path)
+        }
+        let base = NetworkService.shared.publicBaseURL
+        return URL(string: base + path)
+    }
+
     private var record: PlateScanRecord? {
         scanViewModel.scanRecords.first { $0.plate == plate }
     }
@@ -89,13 +116,24 @@ final class VehicleDetailViewModel {
 
         if let v = record.vehicleData {
             // Basic Info
+            let doorsRow: DetailRow? = {
+                if let d = v.doors { return DetailRow(label: "Doors", value: String(d)) }
+                if let opts = v.doorsOptions, !opts.isEmpty {
+                    let value = opts.map(String.init).joined(separator: " or ") + " doors"
+                    return DetailRow(label: "Doors", value: value)
+                }
+                return nil
+            }()
             let basicRows: [DetailRow] = [
                 v.make.map { DetailRow(label: "Make", value: $0) },
                 v.model.map { DetailRow(label: "Model", value: $0) },
                 v.version.map { DetailRow(label: "Version", value: $0) },
                 v.year.map { DetailRow(label: "Year", value: String($0)) },
+                v.bodyClass.map { DetailRow(label: "Body", value: $0.capitalized) },
+                v.driveType.map { DetailRow(label: "Drive Type", value: $0) },
                 v.color.map { DetailRow(label: "Color", value: $0) },
-                v.doors.map { DetailRow(label: "Doors", value: String($0)) },
+                doorsRow,
+                v.mileage.map { DetailRow(label: "Mileage", value: "\($0) km") },
                 v.firstRegistration.map { DetailRow(label: "First Registration", value: $0) },
                 v.vin.map { DetailRow(label: "VIN", value: $0) },
                 v.weight.map { DetailRow(label: "Weight", value: "\($0) kg") },
@@ -109,6 +147,7 @@ final class VehicleDetailViewModel {
                 v.engineSize.map { DetailRow(label: "Engine Size", value: $0) },
                 v.engineCode.map { DetailRow(label: "Engine Code", value: $0) },
                 v.fuelType.map { DetailRow(label: "Fuel Type", value: $0) },
+                v.transmission.map { DetailRow(label: "Transmission", value: $0) },
                 v.horsePower.map { DetailRow(label: "Horse Power", value: $0.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int($0)) HP" : "\($0) HP") },
                 v.powerKw.map { DetailRow(label: "Power", value: "\($0) kW") },
                 v.netMaximumPower.map { DetailRow(label: "Net Max Power", value: $0) },

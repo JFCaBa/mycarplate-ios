@@ -36,7 +36,11 @@ final class NetworkService {
 
     static let shared = NetworkService()
     private let baseURL = "https://mycarplate.online"
-    private let apiKey = "pl_live_fb11d100809bcb313580bad4801bedd76ca8fc8559d654514e6f01126d50aa15"
+    private let apiKey = "pl_live_b7f22a367ce67a9decbea7baba3957076eaa98d006cefba0dcdd19795c628896"
+
+    /// Origin used to resolve relative image URLs returned by the API
+    /// (e.g. `/api/v1/brand-logos/...` or `/api/v1/env-labels/...`).
+    var publicBaseURL: String { baseURL }
 
     private init() {}
 

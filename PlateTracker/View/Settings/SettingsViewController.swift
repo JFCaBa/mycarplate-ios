@@ -255,6 +255,8 @@ final class SliderSettingCell: UITableViewCell {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     private func setupViews() {
+        backgroundConfiguration = .listGroupedCell()
+
         let topRow = UIStackView(arrangedSubviews: [titleLabel, valueLabel])
         topRow.axis = .horizontal
         topRow.distribution = .fill
