@@ -43,6 +43,7 @@ final class SettingsViewController: UITableViewController {
     ]
 
     private let lookupSwitch = UISwitch()
+    private let sendLocationSwitch = UISwitch()
 
     func configure(with scanViewModel: ScanViewModel) {
         self.scanViewModel = scanViewModel
@@ -59,6 +60,12 @@ final class SettingsViewController: UITableViewController {
             return UserDefaults.standard.bool(forKey: "lookupEnabled")
         }()
         lookupSwitch.addTarget(self, action: #selector(lookupToggled), for: .valueChanged)
+
+        sendLocationSwitch.isOn = {
+            if UserDefaults.standard.object(forKey: "sendLocationEnabled") == nil { return true }
+            return UserDefaults.standard.bool(forKey: "sendLocationEnabled")
+        }()
+        sendLocationSwitch.addTarget(self, action: #selector(sendLocationToggled), for: .valueChanged)
     }
 
     // MARK: - Sections
@@ -67,7 +74,7 @@ final class SettingsViewController: UITableViewController {
 
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         switch Section(rawValue: section) {
-        case .scan: return 2
+        case .scan: return 3
         case .recognition: return 1
         case .captureArea: return 3
         case .storage: return 1
@@ -86,7 +93,11 @@ final class SettingsViewController: UITableViewController {
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         switch Section(rawValue: indexPath.section) {
         case .scan:
-            return indexPath.row == 0 ? countryCell() : lookupCell()
+            switch indexPath.row {
+            case 0: return countryCell()
+            case 1: return lookupCell()
+            default: return sendLocationCell()
+            }
         case .recognition:
             return recognitionCell()
         case .captureArea:
@@ -137,7 +148,20 @@ final class SettingsViewController: UITableViewController {
         cell.textLabel?.text = "Lookup vehicle data"
         cell.detailTextLabel?.text = "Fetch make, model & specs from API"
         cell.detailTextLabel?.textColor = .secondaryLabel
+        cell.detailTextLabel?.numberOfLines = 0
         cell.accessoryView = lookupSwitch
+        cell.selectionStyle = .none
+        return cell
+    }
+
+    private func sendLocationCell() -> UITableViewCell {
+        let cell = UITableViewCell(style: .subtitle, reuseIdentifier: "sendLocationCell")
+        cell.imageView?.image = UIImage(systemName: "location")
+        cell.textLabel?.text = "Send location"
+        cell.detailTextLabel?.text = "Include GPS with each lookup so it appears on the dashboard"
+        cell.detailTextLabel?.textColor = .secondaryLabel
+        cell.detailTextLabel?.numberOfLines = 0
+        cell.accessoryView = sendLocationSwitch
         cell.selectionStyle = .none
         return cell
     }
@@ -221,6 +245,10 @@ final class SettingsViewController: UITableViewController {
     @objc private func lookupToggled() {
         UserDefaults.standard.set(lookupSwitch.isOn, forKey: "lookupEnabled")
     }
+
+    @objc private func sendLocationToggled() {
+        UserDefaults.standard.set(sendLocationSwitch.isOn, forKey: "sendLocationEnabled")
+    }
 }
 
 // MARK: - SliderSettingCell
@@ -255,7 +283,11 @@ final class SliderSettingCell: UITableViewCell {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     private func setupViews() {
-        backgroundConfiguration = .listGroupedCell()
+        if #available(iOS 18.0, *) {
+            backgroundConfiguration = .listCell()
+        } else {
+            backgroundConfiguration = .listGroupedCell()
+        }
 
         let topRow = UIStackView(arrangedSubviews: [titleLabel, valueLabel])
         topRow.axis = .horizontal

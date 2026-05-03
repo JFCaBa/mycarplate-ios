@@ -44,9 +44,15 @@ final class NetworkService {
 
     private init() {}
 
-    func fetchVehicle(plate: String, country: String = "ES") -> AnyPublisher<VehicleData, NetworkError> {
+    func fetchVehicle(plate: String,
+                      country: String = "ES",
+                      latitude: Double? = nil,
+                      longitude: Double? = nil) -> AnyPublisher<VehicleData, NetworkError> {
         let encodedPlate = plate.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? plate
-        let urlString = "\(baseURL)/api/v1/vehicle?plate=\(encodedPlate)&country=\(country)"
+        var urlString = "\(baseURL)/api/v1/vehicle?plate=\(encodedPlate)&country=\(country)"
+        if let latitude = latitude, let longitude = longitude {
+            urlString += "&lat=\(latitude)&lng=\(longitude)"
+        }
 
         guard let url = URL(string: urlString) else {
             return Fail(error: NetworkError.invalidURL).eraseToAnyPublisher()

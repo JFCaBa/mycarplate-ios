@@ -33,6 +33,11 @@ final class ScanViewModel {
         return UserDefaults.standard.bool(forKey: "lookupEnabled")
     }
 
+    private var isSendLocationEnabled: Bool {
+        if UserDefaults.standard.object(forKey: "sendLocationEnabled") == nil { return true }
+        return UserDefaults.standard.bool(forKey: "sendLocationEnabled")
+    }
+
     init() {
         self.lookupQueue = PlateLookupQueue()
         self.scanRecords = StorageService.shared.loadRecords()
@@ -183,7 +188,13 @@ final class ScanViewModel {
             return
         }
         let country = record.vehicleData?.country ?? "ES"
-        NetworkService.shared.fetchVehicle(plate: plate, country: country)
+        let coord = isSendLocationEnabled ? currentLocation : nil
+        NetworkService.shared.fetchVehicle(
+            plate: plate,
+            country: country,
+            latitude: coord?.latitude,
+            longitude: coord?.longitude
+        )
             .receive(on: DispatchQueue.main)
             .sink(receiveCompletion: { c in
                 if case .failure = c { completion(false) }

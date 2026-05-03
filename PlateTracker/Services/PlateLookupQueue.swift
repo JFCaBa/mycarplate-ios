@@ -96,7 +96,17 @@ final class PlateLookupQueue {
         persist()
         let processing = items[idx]
         isDispatching = true
-        BackgroundVehicleFetcher.shared.dispatch(plate: processing.plate, country: processing.country)
+        let sendLocation: Bool = {
+            if UserDefaults.standard.object(forKey: "sendLocationEnabled") == nil { return true }
+            return UserDefaults.standard.bool(forKey: "sendLocationEnabled")
+        }()
+        let coord = sendLocation ? processing.location : nil
+        BackgroundVehicleFetcher.shared.dispatch(
+            plate: processing.plate,
+            country: processing.country,
+            latitude: coord?.latitude,
+            longitude: coord?.longitude
+        )
     }
 
     private func finishCurrent(plate: String, outcome: PlateLookupOutcome) {

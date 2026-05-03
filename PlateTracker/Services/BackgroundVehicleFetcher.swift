@@ -80,8 +80,8 @@ final class BackgroundVehicleFetcher: NSObject {
 
     /// Kick off a lookup. The `completionHandler` will fire once the task
     /// finishes, possibly across app launches.
-    func dispatch(plate: String, country: String) {
-        guard let url = buildURL(plate: plate, country: country) else {
+    func dispatch(plate: String, country: String, latitude: Double? = nil, longitude: Double? = nil) {
+        guard let url = buildURL(plate: plate, country: country, latitude: latitude, longitude: longitude) else {
             deliver(plate: plate, outcome: .failure)
             return
         }
@@ -92,9 +92,13 @@ final class BackgroundVehicleFetcher: NSObject {
         task.resume()
     }
 
-    private func buildURL(plate: String, country: String) -> URL? {
+    private func buildURL(plate: String, country: String, latitude: Double?, longitude: Double?) -> URL? {
         let encodedPlate = plate.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? plate
-        return URL(string: "\(baseURL)/api/v1/vehicle?plate=\(encodedPlate)&country=\(country)")
+        var urlString = "\(baseURL)/api/v1/vehicle?plate=\(encodedPlate)&country=\(country)"
+        if let latitude = latitude, let longitude = longitude {
+            urlString += "&lat=\(latitude)&lng=\(longitude)"
+        }
+        return URL(string: urlString)
     }
 
     private func deliver(plate: String, outcome: PlateLookupOutcome) {
