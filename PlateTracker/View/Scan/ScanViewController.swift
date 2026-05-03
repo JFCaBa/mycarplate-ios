@@ -16,6 +16,10 @@ final class ScanViewController: UIViewController {
 
     private var captureSession: AVCaptureSession!
     private var previewLayer: AVCaptureVideoPreviewLayer!
+    private var videoCaptureDevice: AVCaptureDevice?
+    private let cameraDeviceQueue = DispatchQueue(label: "cameraDeviceQueue")
+    private var minZoomFactor: CGFloat = 1
+    private var maxZoomFactor: CGFloat = 1
 
     // We grab a frame straight from the video output instead of using
     // AVCapturePhotoOutput — the OS shutter sound on capturePhoto can't be
@@ -23,19 +27,8 @@ final class ScanViewController: UIViewController {
     // enough for the accurate Vision pass.
     private let ciContext = CIContext(options: nil)
 
-    private let plateLabel: UILabel = {
-        let label = UILabel()
-        label.text = "Plate: ---"
-        label.textColor = .white
-        label.backgroundColor = UIColor.black.withAlphaComponent(0.6)
-        label.textAlignment = .center
-        label.font = UIFont.monospacedDigitSystemFont(ofSize: 22, weight: .bold)
-        label.layer.cornerRadius = 10
-        label.clipsToBounds = true
-        return label
-    }()
-
     private let queuePanel = QueuePanelView()
+    private let zoomControl = CameraZoomControlView()
 
     func configure(with viewModel: ScanViewModel) {
         self.viewModel = viewModel
@@ -46,26 +39,32 @@ final class ScanViewController: UIViewController {
         title = "Scan"
         view.backgroundColor = .black
 
-        setupCamera()
-        setupPlateLabel()
+        setupZoomControl()
         setupQueuePanel()
+        setupCamera()
         bindViewModel()
     }
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         previewLayer?.frame = view.layer.bounds
+        view.bringSubviewToFront(zoomControl)
+        view.bringSubviewToFront(queuePanel)
     }
 
-    private func setupPlateLabel() {
-        view.addSubview(plateLabel)
-        plateLabel.translatesAutoresizingMaskIntoConstraints = false
+    private func setupZoomControl() {
+        zoomControl.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(zoomControl)
         NSLayoutConstraint.activate([
-            plateLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            plateLabel.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -40),
-            plateLabel.widthAnchor.constraint(equalToConstant: 250),
-            plateLabel.heightAnchor.constraint(equalToConstant: 50)
+            zoomControl.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            zoomControl.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -24),
+            zoomControl.widthAnchor.constraint(lessThanOrEqualToConstant: 320),
+            zoomControl.heightAnchor.constraint(equalToConstant: 64),
         ])
+
+        zoomControl.onZoomChanged = { [weak self] factor, animated in
+            self?.applyZoomFactor(factor, animated: animated)
+        }
     }
 
     private func setupQueuePanel() {
@@ -75,7 +74,7 @@ final class ScanViewController: UIViewController {
         NSLayoutConstraint.activate([
             queuePanel.widthAnchor.constraint(equalTo: view.widthAnchor, multiplier: 0.33),
             queuePanel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16),
-            queuePanel.bottomAnchor.constraint(equalTo: plateLabel.topAnchor, constant: -16),
+            queuePanel.bottomAnchor.constraint(equalTo: zoomControl.topAnchor, constant: -8),
             queuePanel.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -8),
         ])
 
@@ -94,19 +93,15 @@ final class ScanViewController: UIViewController {
     private func bindViewModel() {
         viewModel.$detectedPlate
             .receive(on: RunLoop.main)
-            .sink { [weak self] plate in
-                guard let plate = plate else { return }
-                self?.plateLabel.text = "Plate: \(plate)"
-                self?.plateLabel.backgroundColor = UIColor.black.withAlphaComponent(0.6)
+            .sink { plate in
+                guard plate != nil else { return }
             }
             .store(in: &subscriptions)
 
         viewModel.$lastError
             .receive(on: RunLoop.main)
-            .sink { [weak self] error in
-                guard let error = error else { return }
-                self?.plateLabel.text = error
-                self?.plateLabel.backgroundColor = UIColor.red.withAlphaComponent(0.6)
+            .sink { error in
+                guard error != nil else { return }
             }
             .store(in: &subscriptions)
 
@@ -131,6 +126,7 @@ final class ScanViewController: UIViewController {
               let videoInput = try? AVCaptureDeviceInput(device: videoCaptureDevice),
               captureSession.canAddInput(videoInput)
         else { return }
+        self.videoCaptureDevice = videoCaptureDevice
 
         // Higher-resolution video frames so distant plates remain legible to
         // Vision. AVCapturePhotoOutput previously gave us full-sensor stills;
@@ -160,8 +156,54 @@ final class ScanViewController: UIViewController {
         previewLayer.videoGravity = .resizeAspectFill
         view.layer.addSublayer(previewLayer)
 
+        configureZoom(for: videoCaptureDevice)
+
         DispatchQueue(label: "cameraQueue").async { [weak self] in
             self?.captureSession.startRunning()
+        }
+    }
+
+    private func configureZoom(for device: AVCaptureDevice) {
+        // Respect what the device actually exposes — for a virtual multi-cam
+        // (triple/dual-wide) `minAvailableVideoZoomFactor` can be 0.5; for the
+        // plain wide camera it's 1. Cap the upper end at a sensible UX value
+        // so we don't surface 30× digital crops nobody wants.
+        let deviceMin = device.minAvailableVideoZoomFactor
+        let deviceMax = min(device.maxAvailableVideoZoomFactor, device.activeFormat.videoMaxZoomFactor)
+        minZoomFactor = max(0.5, min(deviceMin, 1))
+        maxZoomFactor = max(minZoomFactor, min(deviceMax, 10))
+
+        // Default to 1× (the wide lens) on launch — the device's baseline.
+        let initial = max(minZoomFactor, min(1, maxZoomFactor))
+        zoomControl.configure(minZoomFactor: minZoomFactor,
+                              maxZoomFactor: maxZoomFactor,
+                              initialZoomFactor: initial)
+        // Hide the control if the device offers effectively no range.
+        zoomControl.isHidden = (maxZoomFactor - minZoomFactor) < 0.1
+    }
+
+    private func applyZoomFactor(_ factor: CGFloat, animated: Bool) {
+        guard let device = videoCaptureDevice else { return }
+        let clamped = min(max(factor, minZoomFactor), maxZoomFactor)
+        cameraDeviceQueue.async { [weak self] in
+            do {
+                try device.lockForConfiguration()
+                if animated {
+                    // Slower ramp so the preview transition feels like the
+                    // system Camera (~0.25s for a typical jump) instead of
+                    // snapping abruptly.
+                    device.ramp(toVideoZoomFactor: clamped, withRate: 4)
+                } else {
+                    device.cancelVideoZoomRamp()
+                    device.videoZoomFactor = clamped
+                }
+                device.unlockForConfiguration()
+                DispatchQueue.main.async {
+                    self?.zoomControl.setZoomFactor(clamped, animated: false, emitChange: false)
+                }
+            } catch {
+                print("[Scan] Failed to apply zoom factor: \(error.localizedDescription)")
+            }
         }
     }
 }
