@@ -44,6 +44,7 @@ final class SettingsViewController: UITableViewController {
 
     private let lookupSwitch = UISwitch()
     private let sendLocationSwitch = UISwitch()
+    private let repeatAlertSwitch = UISwitch()
 
     func configure(with scanViewModel: ScanViewModel) {
         self.scanViewModel = scanViewModel
@@ -66,6 +67,10 @@ final class SettingsViewController: UITableViewController {
             return UserDefaults.standard.bool(forKey: "sendLocationEnabled")
         }()
         sendLocationSwitch.addTarget(self, action: #selector(sendLocationToggled), for: .valueChanged)
+
+        // Off by default — vibration is intrusive, so users opt in.
+        repeatAlertSwitch.isOn = UserDefaults.standard.bool(forKey: "repeatSpotAlertEnabled")
+        repeatAlertSwitch.addTarget(self, action: #selector(repeatAlertToggled), for: .valueChanged)
     }
 
     // MARK: - Sections
@@ -74,7 +79,7 @@ final class SettingsViewController: UITableViewController {
 
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         switch Section(rawValue: section) {
-        case .scan: return 3
+        case .scan: return 4
         case .recognition: return 1
         case .captureArea: return 3
         case .storage: return 1
@@ -96,7 +101,8 @@ final class SettingsViewController: UITableViewController {
             switch indexPath.row {
             case 0: return countryCell()
             case 1: return lookupCell()
-            default: return sendLocationCell()
+            case 2: return sendLocationCell()
+            default: return repeatAlertCell()
             }
         case .recognition:
             return recognitionCell()
@@ -162,6 +168,18 @@ final class SettingsViewController: UITableViewController {
         cell.detailTextLabel?.textColor = .secondaryLabel
         cell.detailTextLabel?.numberOfLines = 0
         cell.accessoryView = sendLocationSwitch
+        cell.selectionStyle = .none
+        return cell
+    }
+
+    private func repeatAlertCell() -> UITableViewCell {
+        let cell = UITableViewCell(style: .subtitle, reuseIdentifier: "repeatAlertCell")
+        cell.imageView?.image = UIImage(systemName: "wave.3.right")
+        cell.textLabel?.text = "Repeat-spot alert"
+        cell.detailTextLabel?.text = "Vibrate and flash when the same plate is sighted in a new location"
+        cell.detailTextLabel?.textColor = .secondaryLabel
+        cell.detailTextLabel?.numberOfLines = 0
+        cell.accessoryView = repeatAlertSwitch
         cell.selectionStyle = .none
         return cell
     }
@@ -248,6 +266,10 @@ final class SettingsViewController: UITableViewController {
 
     @objc private func sendLocationToggled() {
         UserDefaults.standard.set(sendLocationSwitch.isOn, forKey: "sendLocationEnabled")
+    }
+
+    @objc private func repeatAlertToggled() {
+        UserDefaults.standard.set(repeatAlertSwitch.isOn, forKey: "repeatSpotAlertEnabled")
     }
 }
 

@@ -5,6 +5,7 @@
 
 import UIKit
 import AVFoundation
+import AudioToolbox
 import CoreImage
 import Vision
 import Combine
@@ -29,6 +30,15 @@ final class ScanViewController: UIViewController {
 
     private let queuePanel = QueuePanelView()
     private let zoomControl = CameraZoomControlView()
+    private let flashOverlay: UIView = {
+        let view = UIView()
+        view.backgroundColor = .white
+        view.alpha = 0
+        view.isUserInteractionEnabled = false
+        view.translatesAutoresizingMaskIntoConstraints = false
+        return view
+    }()
+    private var repeatAlertVibrationTimer: Timer?
 
     func configure(with viewModel: ScanViewModel) {
         self.viewModel = viewModel
@@ -41,6 +51,7 @@ final class ScanViewController: UIViewController {
 
         setupZoomControl()
         setupQueuePanel()
+        setupFlashOverlay()
         setupCamera()
         bindViewModel()
     }
@@ -50,6 +61,7 @@ final class ScanViewController: UIViewController {
         previewLayer?.frame = view.layer.bounds
         view.bringSubviewToFront(zoomControl)
         view.bringSubviewToFront(queuePanel)
+        view.bringSubviewToFront(flashOverlay)
     }
 
     private func setupZoomControl() {
@@ -65,6 +77,16 @@ final class ScanViewController: UIViewController {
         zoomControl.onZoomChanged = { [weak self] factor, animated in
             self?.applyZoomFactor(factor, animated: animated)
         }
+    }
+
+    private func setupFlashOverlay() {
+        view.addSubview(flashOverlay)
+        NSLayoutConstraint.activate([
+            flashOverlay.topAnchor.constraint(equalTo: view.topAnchor),
+            flashOverlay.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            flashOverlay.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            flashOverlay.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+        ])
     }
 
     private func setupQueuePanel() {
@@ -118,6 +140,43 @@ final class ScanViewController: UIViewController {
                 }
             }
             .store(in: &subscriptions)
+
+        viewModel.$repeatSpottedAt
+            .compactMap { $0 }
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.fireRepeatSpotAlertIfEnabled()
+            }
+            .store(in: &subscriptions)
+    }
+
+    private func fireRepeatSpotAlertIfEnabled() {
+        guard UserDefaults.standard.bool(forKey: "repeatSpotAlertEnabled") else { return }
+
+        // Vibration: iOS doesn't expose continuous vibration like Android,
+        // so we trigger the system vibration four times spaced 0.5s apart
+        // for the requested ~2-second feel.
+        repeatAlertVibrationTimer?.invalidate()
+        var pulses = 0
+        AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+        repeatAlertVibrationTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] timer in
+            pulses += 1
+            AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+            if pulses >= 3 {
+                timer.invalidate()
+                self?.repeatAlertVibrationTimer = nil
+            }
+        }
+
+        // Flash: two pulses of a white overlay over the full 2-second window.
+        flashOverlay.layer.removeAllAnimations()
+        flashOverlay.alpha = 0
+        UIView.animateKeyframes(withDuration: 2.0, delay: 0, options: [.calculationModeCubic]) { [flashOverlay] in
+            UIView.addKeyframe(withRelativeStartTime: 0.00, relativeDuration: 0.20) { flashOverlay.alpha = 0.7 }
+            UIView.addKeyframe(withRelativeStartTime: 0.20, relativeDuration: 0.30) { flashOverlay.alpha = 0.0 }
+            UIView.addKeyframe(withRelativeStartTime: 0.50, relativeDuration: 0.20) { flashOverlay.alpha = 0.7 }
+            UIView.addKeyframe(withRelativeStartTime: 0.70, relativeDuration: 0.30) { flashOverlay.alpha = 0.0 }
+        }
     }
 
     private func setupCamera() {

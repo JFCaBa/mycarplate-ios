@@ -15,6 +15,10 @@ final class ScanViewModel {
     @Published private(set) var scanRecords: [PlateScanRecord] = []
     @Published private(set) var detectedPlate: String?
     @Published private(set) var lastError: String?
+    /// Set when a known plate is sighted at a new location (>25m from its
+    /// last sighting). Consumers (e.g. ScanViewController) observe this to
+    /// fire the vibration + screen-flash alert when the user has opted in.
+    @Published private(set) var repeatSpottedAt: Date?
 
     let lookupQueue: PlateLookupQueue
 
@@ -143,6 +147,9 @@ final class ScanViewModel {
             )
             scanRecords[index].sightings.append(sighting)
             StorageService.shared.saveRecords(scanRecords)
+            // Same plate, new location — surface a one-shot signal so the
+            // UI can fire the repeat-spot alert if the user enabled it.
+            repeatSpottedAt = Date()
             return
         }
 
