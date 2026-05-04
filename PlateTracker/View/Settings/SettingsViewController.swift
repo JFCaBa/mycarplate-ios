@@ -45,6 +45,7 @@ final class SettingsViewController: UITableViewController {
     private let lookupSwitch = UISwitch()
     private let sendLocationSwitch = UISwitch()
     private let repeatAlertSwitch = UISwitch()
+    private let repeatNotificationSwitch = UISwitch()
 
     func configure(with scanViewModel: ScanViewModel) {
         self.scanViewModel = scanViewModel
@@ -71,6 +72,9 @@ final class SettingsViewController: UITableViewController {
         // Off by default — vibration is intrusive, so users opt in.
         repeatAlertSwitch.isOn = UserDefaults.standard.bool(forKey: "repeatSpotAlertEnabled")
         repeatAlertSwitch.addTarget(self, action: #selector(repeatAlertToggled), for: .valueChanged)
+
+        repeatNotificationSwitch.isOn = UserDefaults.standard.bool(forKey: "repeatSpotNotificationEnabled")
+        repeatNotificationSwitch.addTarget(self, action: #selector(repeatNotificationToggled), for: .valueChanged)
     }
 
     // MARK: - Sections
@@ -79,7 +83,7 @@ final class SettingsViewController: UITableViewController {
 
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         switch Section(rawValue: section) {
-        case .scan: return 4
+        case .scan: return 5
         case .recognition: return 1
         case .captureArea: return 3
         case .storage: return 1
@@ -102,7 +106,8 @@ final class SettingsViewController: UITableViewController {
             case 0: return countryCell()
             case 1: return lookupCell()
             case 2: return sendLocationCell()
-            default: return repeatAlertCell()
+            case 3: return repeatAlertCell()
+            default: return repeatNotificationCell()
             }
         case .recognition:
             return recognitionCell()
@@ -180,6 +185,18 @@ final class SettingsViewController: UITableViewController {
         cell.detailTextLabel?.textColor = .secondaryLabel
         cell.detailTextLabel?.numberOfLines = 0
         cell.accessoryView = repeatAlertSwitch
+        cell.selectionStyle = .none
+        return cell
+    }
+
+    private func repeatNotificationCell() -> UITableViewCell {
+        let cell = UITableViewCell(style: .subtitle, reuseIdentifier: "repeatNotificationCell")
+        cell.imageView?.image = UIImage(systemName: "bell.badge")
+        cell.textLabel?.text = "Repeat-spot notification"
+        cell.detailTextLabel?.text = "Push a banner when the same plate is sighted in a new location"
+        cell.detailTextLabel?.textColor = .secondaryLabel
+        cell.detailTextLabel?.numberOfLines = 0
+        cell.accessoryView = repeatNotificationSwitch
         cell.selectionStyle = .none
         return cell
     }
@@ -270,6 +287,25 @@ final class SettingsViewController: UITableViewController {
 
     @objc private func repeatAlertToggled() {
         UserDefaults.standard.set(repeatAlertSwitch.isOn, forKey: "repeatSpotAlertEnabled")
+    }
+
+    @objc private func repeatNotificationToggled() {
+        let isOn = repeatNotificationSwitch.isOn
+        UserDefaults.standard.set(isOn, forKey: "repeatSpotNotificationEnabled")
+        guard isOn else { return }
+        NotificationService.shared.requestAuthorizationIfNeeded { [weak self] granted in
+            guard let self = self, !granted else { return }
+            // Permission denied — bounce the toggle back off and explain.
+            UserDefaults.standard.set(false, forKey: "repeatSpotNotificationEnabled")
+            self.repeatNotificationSwitch.setOn(false, animated: true)
+            let alert = UIAlertController(
+                title: "Notifications disabled",
+                message: "Enable notifications for PlateTracker in Settings to receive repeat-spot banners.",
+                preferredStyle: .alert
+            )
+            alert.addAction(UIAlertAction(title: "OK", style: .default))
+            self.present(alert, animated: true)
+        }
     }
 }
 

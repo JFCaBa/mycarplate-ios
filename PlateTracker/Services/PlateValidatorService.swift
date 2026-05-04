@@ -14,15 +14,31 @@ enum PlateCountry: String, CaseIterable {
 
 final class PlateValidator {
 
+    /// Tokens that may appear on the EU blue band and bleed into Vision's read
+    /// of the plate text — country codes plus Spanish regional badges. Single-
+    /// letter country codes also catch common Vision mis-reads of the band
+    /// glyph (e.g. "E" reads as "D" or "F" on some frames).
+    private static let euBandPrefixes: Set<String> = [
+        // Country codes
+        "E", "ES", "F", "FR", "D", "DE", "GB", "UK", "NL",
+        "N", "NO", "P", "PT", "I", "IT", "B", "BE", "A", "AT",
+        "CH", "PL", "L", "LU", "DK", "S", "SE", "FIN", "IRL",
+        // Spanish regional badges (sometimes prefixed with E)
+        "CAT", "AND", "PV", "GAL", "EUS", "VAL", "EXT",
+        "ECAT", "EAND", "EPV", "EGAL", "EEUS", "EVAL",
+    ]
+
     /// Strips OCR noise from the EU blue band (country codes, regional identifiers
     /// like CAT, AND, PV, etc.) that Vision may read as part of the plate text.
-    /// Tries progressively shorter prefixes (up to 4 chars) — only strips when
-    /// the remainder is itself a valid plate.
+    /// Only strips when the leading 1-4 chars match a known EU-band token AND
+    /// the remainder is itself a valid plate — so historic plates like GRAP7726
+    /// (where "GR" is a province code, not a band token) stay intact.
     static func cleanEUBandPrefix(_ raw: String) -> String {
-        // Try stripping 1 to 4 leading characters (covers "E", "ES", "CAT", "ECAT", etc.)
-        let maxStrip = min(4, raw.count - 4) // keep at least 4 chars for a valid plate
+        let maxStrip = min(4, raw.count - 4)
         guard maxStrip > 0 else { return raw }
         for length in (1...maxStrip).reversed() {
+            let prefix = String(raw.prefix(length))
+            guard euBandPrefixes.contains(prefix) else { continue }
             let stripped = String(raw.dropFirst(length))
             if detectCountry(plate: stripped) != nil {
                 return stripped
@@ -36,6 +52,8 @@ final class PlateValidator {
         let maxStrip = min(4, raw.count - 4)
         guard maxStrip > 0 else { return raw }
         for length in (1...maxStrip).reversed() {
+            let prefix = String(raw.prefix(length))
+            guard euBandPrefixes.contains(prefix) else { continue }
             let stripped = String(raw.dropFirst(length))
             if isValid(plate: stripped, for: country) {
                 return stripped
@@ -54,6 +72,9 @@ final class PlateValidator {
             #"^H\d{4}[A-Z]{3}$"#,
             #"^H[A-Z]{1,2}\d{4}$"#,
             #"^[A-Z]{1,2}\d{4}[A-Z]{3}$"#,
+            // Historic two-line motorcycle/old-format: province + series letters
+            // on top, 4 digits below — joined as e.g. GRAP7726.
+            #"^[A-Z]{2,4}\d{4}$"#,
         ],
         .netherlands: [
             // With dashes (sidecodes 1-12)

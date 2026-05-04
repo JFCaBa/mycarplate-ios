@@ -8,6 +8,7 @@
 import UIKit
 import SDWebImage
 import SDWebImageSVGCoder
+import UserNotifications
 
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -18,6 +19,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // Eagerly create the URLSession.background instance so its delegate
         // is live before iOS delivers any pending events on a relaunch.
         BackgroundVehicleFetcher.shared.bootstrap()
+        // Surface repeat-spot banners even while the app is in the foreground.
+        UNUserNotificationCenter.current().delegate = self
         return true
     }
 
@@ -40,4 +43,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     func application(_ application: UIApplication,
                      didDiscardSceneSessions sceneSessions: Set<UISceneSession>) {}
+}
+
+extension AppDelegate: UNUserNotificationCenterDelegate {
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                willPresent notification: UNNotification,
+                                withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.banner, .list, .sound])
+    }
 }

@@ -15,10 +15,15 @@ final class ScanViewModel {
     @Published private(set) var scanRecords: [PlateScanRecord] = []
     @Published private(set) var detectedPlate: String?
     @Published private(set) var lastError: String?
-    /// Set when a known plate is sighted at a new location (>25m from its
-    /// last sighting). Consumers (e.g. ScanViewController) observe this to
-    /// fire the vibration + screen-flash alert when the user has opted in.
-    @Published private(set) var repeatSpottedAt: Date?
+    /// Fires when a known plate is sighted at a new location (>25m from its
+    /// last sighting). Carries the plate so consumers can mention it in
+    /// alerts/notifications.
+    @Published private(set) var repeatSighting: RepeatSighting?
+
+    struct RepeatSighting: Equatable {
+        let plate: String
+        let at: Date
+    }
 
     let lookupQueue: PlateLookupQueue
 
@@ -80,7 +85,10 @@ final class ScanViewModel {
     // MARK: - Scan flow
 
     func processRecognizedText(_ text: String, capturedFrame: UIImage?) {
-        let raw = text.replacingOccurrences(of: " ", with: "").uppercased()
+        // Drop spaces, dashes, dots, slashes — anything that isn't a letter or
+        // digit. Historic Spanish motorcycle plates render as "GR-AP" / "7726"
+        // and Vision may emit either "GR-AP" or "GR AP" depending on the font.
+        let raw = text.uppercased().filter { $0.isLetter || $0.isNumber }
         let country = selectedCountry
         let plate = PlateValidator.cleanEUBandPrefix(raw, for: country)
 
@@ -149,7 +157,7 @@ final class ScanViewModel {
             StorageService.shared.saveRecords(scanRecords)
             // Same plate, new location — surface a one-shot signal so the
             // UI can fire the repeat-spot alert if the user enabled it.
-            repeatSpottedAt = Date()
+            repeatSighting = RepeatSighting(plate: plate, at: Date())
             return
         }
 

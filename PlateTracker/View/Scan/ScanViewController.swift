@@ -40,6 +40,9 @@ final class ScanViewController: UIViewController {
     }()
     private var repeatAlertVibrationTimer: Timer?
 
+    private var sleepWindow: UIWindow?
+    private var brightnessBeforeSleep: CGFloat?
+
     func configure(with viewModel: ScanViewModel) {
         self.viewModel = viewModel
     }
@@ -49,11 +52,43 @@ final class ScanViewController: UIViewController {
         title = "Scan"
         view.backgroundColor = .black
 
+        navigationItem.rightBarButtonItem = UIBarButtonItem(
+            image: UIImage(systemName: "moon.fill"),
+            style: .plain,
+            target: self,
+            action: #selector(enterSleepMode)
+        )
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAppWillResignActive),
+            name: UIApplication.willResignActiveNotification,
+            object: nil
+        )
+
         setupZoomControl()
         setupQueuePanel()
         setupFlashOverlay()
         setupCamera()
         bindViewModel()
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        // Keep the screen awake while the scan view is showing — the user is
+        // actively looking at the camera (or has the app fake-sleeping) and
+        // doesn't want iOS to auto-lock and stop the capture session.
+        UIApplication.shared.isIdleTimerDisabled = true
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        UIApplication.shared.isIdleTimerDisabled = false
+        exitSleepMode()
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
 
     override func viewDidLayoutSubviews() {
@@ -141,13 +176,20 @@ final class ScanViewController: UIViewController {
             }
             .store(in: &subscriptions)
 
-        viewModel.$repeatSpottedAt
+        viewModel.$repeatSighting
             .compactMap { $0 }
             .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
-                self?.fireRepeatSpotAlertIfEnabled()
+            .sink { [weak self] sighting in
+                self?.handleRepeatSighting(sighting)
             }
             .store(in: &subscriptions)
+    }
+
+    private func handleRepeatSighting(_ sighting: ScanViewModel.RepeatSighting) {
+        if UserDefaults.standard.bool(forKey: "repeatSpotNotificationEnabled") {
+            NotificationService.shared.notifyRepeatSpot(plate: sighting.plate)
+        }
+        fireRepeatSpotAlertIfEnabled()
     }
 
     private func fireRepeatSpotAlertIfEnabled() {
@@ -241,6 +283,39 @@ final class ScanViewController: UIViewController {
         zoomControl.isHidden = (maxZoomFactor - minZoomFactor) < 0.1
     }
 
+    @objc private func enterSleepMode() {
+        guard sleepWindow == nil, let scene = view.window?.windowScene else { return }
+
+        brightnessBeforeSleep = UIScreen.main.brightness
+        UIScreen.main.brightness = 0
+
+        let overlay = SleepOverlayViewController()
+        overlay.onDoubleTap = { [weak self] in self?.exitSleepMode() }
+
+        let window = UIWindow(windowScene: scene)
+        window.windowLevel = .alert + 1
+        window.rootViewController = overlay
+        window.makeKeyAndVisible()
+        sleepWindow = window
+    }
+
+    private func exitSleepMode() {
+        guard let window = sleepWindow else { return }
+        if let saved = brightnessBeforeSleep {
+            UIScreen.main.brightness = saved
+            brightnessBeforeSleep = nil
+        }
+        window.isHidden = true
+        sleepWindow = nil
+        view.window?.makeKeyAndVisible()
+    }
+
+    @objc private func handleAppWillResignActive() {
+        // If the app is leaving the foreground, drop sleep mode so the user's
+        // system brightness isn't left at 0.
+        exitSleepMode()
+    }
+
     private func applyZoomFactor(_ factor: CGFloat, animated: Bool) {
         guard let device = videoCaptureDevice else { return }
         let clamped = min(max(factor, minZoomFactor), maxZoomFactor)
@@ -279,13 +354,37 @@ extension ScanViewController: AVCaptureVideoDataOutputSampleBufferDelegate {
             guard let results = request.results as? [VNRecognizedTextObservation] else { return }
 
             let threshold = ScanRecognitionConfig.confidence
-            let matches: [(String, CGRect)] = results.compactMap { obs in
+            let observations: [(text: String, box: CGRect)] = results.compactMap { obs in
                 guard obs.confidence >= threshold,
                       let cand = obs.topCandidates(1).first,
                       cand.confidence >= threshold else { return nil }
                 return (cand.string, obs.boundingBox)
             }
-            guard !matches.isEmpty else { return }
+            guard !observations.isEmpty else { return }
+
+            // Two-line plates (Spanish motorcycle, square plates) come back as
+            // separate Vision observations — neither line passes validation on
+            // its own. Pair vertically-stacked observations with similar widths
+            // and emit the joined text as an additional candidate.
+            var matches: [(String, CGRect)] = observations.map { ($0.text, $0.box) }
+            for i in 0..<observations.count {
+                for j in 0..<observations.count where i != j {
+                    let top = observations[i]
+                    let bottom = observations[j]
+                    // Vision normalized box: origin bottom-left, y grows up,
+                    // so "above" means top.minY > bottom.maxY.
+                    guard top.box.minY >= bottom.box.maxY else { continue }
+                    let gap = top.box.minY - bottom.box.maxY
+                    let avgH = (top.box.height + bottom.box.height) / 2
+                    guard avgH > 0, gap < avgH * 0.8 else { continue }
+                    let widerWidth = max(top.box.width, bottom.box.width)
+                    guard widerWidth > 0,
+                          abs(top.box.midX - bottom.box.midX) < widerWidth * 0.4 else { continue }
+                    let widthRatio = min(top.box.width, bottom.box.width) / widerWidth
+                    guard widthRatio > 0.4 else { continue }
+                    matches.append((top.text + bottom.text, top.box.union(bottom.box)))
+                }
+            }
 
             self?.handleMatches(matches, pixelBuffer: pixelBuffer)
         }
