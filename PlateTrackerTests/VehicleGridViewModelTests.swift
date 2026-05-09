@@ -20,7 +20,9 @@ extension VehicleData {
             firstRegistration: nil, powerKw: nil,
             base7Code: nil, base7CodeOptions: nil,
             weight: nil, vin: nil, engineCode: nil,
-            source: nil, confidence: nil, immoPin: nil
+            source: nil, confidence: nil, immoPin: nil,
+            envLabelCode: nil, envLabelImageUrl: nil, brandLogoUrl: nil,
+            bodyClass: nil, driveType: nil, transmission: nil, mileage: nil
         )
     }
 }
