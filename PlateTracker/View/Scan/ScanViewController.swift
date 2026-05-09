@@ -183,6 +183,14 @@ final class ScanViewController: UIViewController {
                 self?.handleRepeatSighting(sighting)
             }
             .store(in: &subscriptions)
+
+        viewModel.$watchlistMatch
+            .compactMap { $0 }
+            .receive(on: RunLoop.main)
+            .sink { [weak self] match in
+                self?.handleWatchlistMatch(match)
+            }
+            .store(in: &subscriptions)
     }
 
     private func handleRepeatSighting(_ sighting: ScanViewModel.RepeatSighting) {
@@ -219,6 +227,45 @@ final class ScanViewController: UIViewController {
             UIView.addKeyframe(withRelativeStartTime: 0.50, relativeDuration: 0.20) { flashOverlay.alpha = 0.7 }
             UIView.addKeyframe(withRelativeStartTime: 0.70, relativeDuration: 0.30) { flashOverlay.alpha = 0.0 }
         }
+    }
+
+    private func handleWatchlistMatch(_ match: ScanViewModel.WatchlistMatch) {
+        guard viewModel.isWatchlistAlertEnabled else {
+            viewModel.consumeWatchlistMatch()
+            return
+        }
+
+        // 1. Flash overlay — reuse the same keyframe animation as repeat-spot.
+        flashOverlay.layer.removeAllAnimations()
+        flashOverlay.alpha = 0
+        UIView.animateKeyframes(withDuration: 2.0, delay: 0, options: [.calculationModeCubic]) { [flashOverlay] in
+            UIView.addKeyframe(withRelativeStartTime: 0.00, relativeDuration: 0.20) { flashOverlay.alpha = 0.7 }
+            UIView.addKeyframe(withRelativeStartTime: 0.20, relativeDuration: 0.30) { flashOverlay.alpha = 0.0 }
+            UIView.addKeyframe(withRelativeStartTime: 0.50, relativeDuration: 0.20) { flashOverlay.alpha = 0.7 }
+            UIView.addKeyframe(withRelativeStartTime: 0.70, relativeDuration: 0.30) { flashOverlay.alpha = 0.0 }
+        }
+
+        // 2. Vibrate — same 4-pulse pattern as repeat-spot.
+        repeatAlertVibrationTimer?.invalidate()
+        var pulses = 0
+        AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+        repeatAlertVibrationTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] timer in
+            pulses += 1
+            AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+            if pulses >= 3 {
+                timer.invalidate()
+                self?.repeatAlertVibrationTimer = nil
+            }
+        }
+
+        // 3. Banner with the alarm sound (or silent if the user toggled it off).
+        NotificationService.shared.notifyWatchlistMatch(
+            plate: match.plate,
+            name: match.name,
+            silent: !viewModel.isWatchlistSoundEnabled
+        )
+
+        viewModel.consumeWatchlistMatch()
     }
 
     private func setupCamera() {

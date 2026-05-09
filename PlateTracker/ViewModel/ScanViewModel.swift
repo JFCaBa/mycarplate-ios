@@ -20,8 +20,18 @@ final class ScanViewModel {
     /// alerts/notifications.
     @Published private(set) var repeatSighting: RepeatSighting?
 
+    /// Fires when a scanned plate matches the user's imported watchlist.
+    /// Carries the plate and stored name so consumers can label the alert.
+    @Published private(set) var watchlistMatch: WatchlistMatch?
+
     struct RepeatSighting: Equatable {
         let plate: String
+        let at: Date
+    }
+
+    struct WatchlistMatch: Equatable {
+        let plate: String
+        let name: String?
         let at: Date
     }
 
@@ -45,6 +55,22 @@ final class ScanViewModel {
     private var isSendLocationEnabled: Bool {
         if UserDefaults.standard.object(forKey: "sendLocationEnabled") == nil { return true }
         return UserDefaults.standard.bool(forKey: "sendLocationEnabled")
+    }
+
+    var isWatchlistAlertEnabled: Bool {
+        // Defaults to true; the toggle UI guards against firing when the list
+        // is empty (see SettingsViewController).
+        if UserDefaults.standard.object(forKey: "watchlistAlertEnabled") == nil { return true }
+        return UserDefaults.standard.bool(forKey: "watchlistAlertEnabled")
+    }
+
+    var isWatchlistSoundEnabled: Bool {
+        if UserDefaults.standard.object(forKey: "watchlistSoundEnabled") == nil { return true }
+        return UserDefaults.standard.bool(forKey: "watchlistSoundEnabled")
+    }
+
+    func consumeWatchlistMatch() {
+        watchlistMatch = nil
     }
 
     init() {
@@ -108,6 +134,14 @@ final class ScanViewModel {
 
         // Show detected plate immediately.
         detectedPlate = plate
+
+        if WatchlistStore.shared.contains(plate: plate) {
+            watchlistMatch = WatchlistMatch(
+                plate: plate,
+                name: WatchlistStore.shared.name(for: plate),
+                at: Date()
+            )
+        }
 
         // Existing plate — append a new sighting, or just refresh the last one
         // if we're within Self.minSightingDistanceMeters of it (stationary device
