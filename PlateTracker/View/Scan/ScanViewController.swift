@@ -259,11 +259,21 @@ final class ScanViewController: UIViewController {
             }
         }
 
-        // 3. Banner with the alarm sound (or silent if the user toggled it off).
+        // 3. Foreground audio accent. The notification banner itself is silent
+        //    (see NotificationService.notifyWatchlistMatch); we play a system
+        //    sound here when the user has the alarm sound enabled, so watchlist
+        //    matches are audibly distinct from repeat-spot (which uses the
+        //    standard .default banner sound).
+        if viewModel.isWatchlistSoundEnabled {
+            // System sound 1005 = "new mail" — a short, attention-grabbing tone.
+            // Public ID; no entitlement needed.
+            AudioServicesPlaySystemSound(1005)
+        }
+
+        // 4. Banner (always silent — see comment above).
         NotificationService.shared.notifyWatchlistMatch(
             plate: match.plate,
-            name: match.name,
-            silent: !viewModel.isWatchlistSoundEnabled
+            name: match.name
         )
 
         viewModel.consumeWatchlistMatch()

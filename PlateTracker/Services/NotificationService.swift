@@ -47,10 +47,11 @@ final class NotificationService {
         UNUserNotificationCenter.current().add(request, withCompletionHandler: nil)
     }
 
-    /// Posts an immediate banner for a watchlist match.
-    /// - Parameter silent: when true, suppresses the bundled alarm sound (the
-    ///   user toggled "Alarm sound" off but kept the notification on).
-    func notifyWatchlistMatch(plate: String, name: String?, silent: Bool) {
+    /// Posts an immediate banner for a watchlist match. The notification itself
+    /// is silent — `ScanViewController` plays a foreground audio accent (system
+    /// sound 1005) when the user has the watchlist sound enabled, so the banner
+    /// sound and the in-app accent don't double up.
+    func notifyWatchlistMatch(plate: String, name: String?) {
         let content = UNMutableNotificationContent()
         content.title = "Watchlist match"
         if let name = name, !name.isEmpty {
@@ -58,9 +59,7 @@ final class NotificationService {
         } else {
             content.body = plate
         }
-        // The bundled .caf must be present in the main bundle. If it's missing
-        // or in the wrong format, iOS silently falls back to the default sound.
-        content.sound = silent ? nil : UNNotificationSound(named: UNNotificationSoundName("watchlist_alarm.caf"))
+        content.sound = nil
         let request = UNNotificationRequest(
             identifier: "watchlistMatch.\(plate).\(UUID().uuidString)",
             content: content,
