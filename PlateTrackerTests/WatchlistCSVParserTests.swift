@@ -69,6 +69,13 @@ final class WatchlistCSVParserTests: XCTestCase {
         XCTAssertEqual(result.skipped, 0)
     }
 
+    func testStripsLeadingBOM() throws {
+        let result = try parse("\u{FEFF}Mum,1234ABC\n")
+        XCTAssertEqual(result.entries.count, 1)
+        XCTAssertEqual(result.entries.first?.name, "Mum")
+        XCTAssertEqual(result.entries.first?.plate, "1234ABC")
+    }
+
     func testThrowsWhenAboveMaxRows() {
         let lines = (0..<10_001).map { "Name\($0),PLATE\($0)X" }.joined(separator: "\n")
         XCTAssertThrowsError(try parse(lines)) { error in

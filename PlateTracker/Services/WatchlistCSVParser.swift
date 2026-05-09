@@ -24,6 +24,8 @@ enum WatchlistCSVParser {
     }
 
     static func parse(text: String) throws -> Result {
+        var text = text
+        if text.first == "\u{FEFF}" { text.removeFirst() }
         let rawLines = text.split(whereSeparator: { $0 == "\n" || $0 == "\r\n" })
         let nonBlank = rawLines.map(String.init).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
         guard nonBlank.count <= maxRows + 1 /* header tolerance */ else {
