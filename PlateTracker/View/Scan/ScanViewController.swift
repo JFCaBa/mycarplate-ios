@@ -39,6 +39,7 @@ final class ScanViewController: UIViewController {
         return view
     }()
     private var repeatAlertVibrationTimer: Timer?
+    private var watchlistAlertVibrationTimer: Timer?
 
     private var sleepWindow: UIWindow?
     private var brightnessBeforeSleep: CGFloat?
@@ -246,15 +247,15 @@ final class ScanViewController: UIViewController {
         }
 
         // 2. Vibrate — same 4-pulse pattern as repeat-spot.
-        repeatAlertVibrationTimer?.invalidate()
+        watchlistAlertVibrationTimer?.invalidate()
         var pulses = 0
         AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
-        repeatAlertVibrationTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] timer in
+        watchlistAlertVibrationTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] timer in
             pulses += 1
             AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
             if pulses >= 3 {
                 timer.invalidate()
-                self?.repeatAlertVibrationTimer = nil
+                self?.watchlistAlertVibrationTimer = nil
             }
         }
 
