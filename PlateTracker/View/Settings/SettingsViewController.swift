@@ -4,6 +4,7 @@
 //
 
 import UIKit
+import UniformTypeIdentifiers
 
 final class SettingsViewController: UITableViewController {
 
@@ -11,6 +12,7 @@ final class SettingsViewController: UITableViewController {
         case scan = 0
         case recognition
         case captureArea
+        case watchlist
         case storage
 
         var title: String {
@@ -18,6 +20,7 @@ final class SettingsViewController: UITableViewController {
             case .scan: return "Scan Preferences"
             case .recognition: return "Recognition"
             case .captureArea: return "Capture Area"
+            case .watchlist: return "Watchlist"
             case .storage: return "Storage"
             }
         }
@@ -28,6 +31,8 @@ final class SettingsViewController: UITableViewController {
                 return "Minimum confidence required to accept a plate. Lower values trigger captures more often but may produce false reads; higher values are stricter but slower to fire."
             case .captureArea:
                 return "How much of the car to capture around the plate, in multiples of plate size. Width is symmetric; above/below adjust the vertical crop independently so you can bias toward the hood or rear."
+            case .watchlist:
+                return "Import a CSV (name,plate) to be alerted when one of those plates is read by the scanner."
             default: return nil
             }
         }
@@ -46,6 +51,8 @@ final class SettingsViewController: UITableViewController {
     private let sendLocationSwitch = UISwitch()
     private let repeatAlertSwitch = UISwitch()
     private let repeatNotificationSwitch = UISwitch()
+    private let watchlistAlertSwitch = UISwitch()
+    private let watchlistSoundSwitch = UISwitch()
 
     func configure(with scanViewModel: ScanViewModel) {
         self.scanViewModel = scanViewModel
@@ -75,6 +82,29 @@ final class SettingsViewController: UITableViewController {
 
         repeatNotificationSwitch.isOn = UserDefaults.standard.bool(forKey: "repeatSpotNotificationEnabled")
         repeatNotificationSwitch.addTarget(self, action: #selector(repeatNotificationToggled), for: .valueChanged)
+
+        watchlistAlertSwitch.isOn = {
+            if UserDefaults.standard.object(forKey: "watchlistAlertEnabled") == nil { return true }
+            return UserDefaults.standard.bool(forKey: "watchlistAlertEnabled")
+        }()
+        watchlistAlertSwitch.addTarget(self, action: #selector(watchlistAlertToggled), for: .valueChanged)
+
+        watchlistSoundSwitch.isOn = {
+            if UserDefaults.standard.object(forKey: "watchlistSoundEnabled") == nil { return true }
+            return UserDefaults.standard.bool(forKey: "watchlistSoundEnabled")
+        }()
+        watchlistSoundSwitch.addTarget(self, action: #selector(watchlistSoundToggled), for: .valueChanged)
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(watchlistDidChange),
+            name: WatchlistStore.didChangeNotification,
+            object: nil
+        )
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
 
     // MARK: - Sections
@@ -86,6 +116,7 @@ final class SettingsViewController: UITableViewController {
         case .scan: return 5
         case .recognition: return 1
         case .captureArea: return 3
+        case .watchlist: return 4
         case .storage: return 1
         case .none: return 0
         }
@@ -113,6 +144,13 @@ final class SettingsViewController: UITableViewController {
             return recognitionCell()
         case .captureArea:
             return captureAreaCell(for: indexPath.row)
+        case .watchlist:
+            switch indexPath.row {
+            case 0: return watchlistImportCell()
+            case 1: return watchlistViewCell()
+            case 2: return watchlistAlertCell()
+            default: return watchlistSoundCell()
+            }
         case .storage:
             return storageCell()
         case .none:
@@ -126,6 +164,11 @@ final class SettingsViewController: UITableViewController {
         switch section {
         case .scan where indexPath.row == 0:
             showCountryPicker()
+        case .watchlist where indexPath.row == 0:
+            presentImportPicker()
+        case .watchlist where indexPath.row == 1:
+            let listVC = WatchlistListViewController()
+            navigationController?.pushViewController(listVC, animated: true)
         case .storage:
             let storageVC = StorageViewController()
             storageVC.configure(with: scanViewModel)
@@ -259,6 +302,49 @@ final class SettingsViewController: UITableViewController {
         return cell
     }
 
+    private func watchlistImportCell() -> UITableViewCell {
+        let cell = UITableViewCell(style: .value1, reuseIdentifier: "watchlistImportCell")
+        cell.imageView?.image = UIImage(systemName: "square.and.arrow.down")
+        cell.textLabel?.text = "Import CSV…"
+        cell.detailTextLabel?.text = "\(WatchlistStore.shared.count) entries"
+        cell.accessoryType = .disclosureIndicator
+        return cell
+    }
+
+    private func watchlistViewCell() -> UITableViewCell {
+        let cell = UITableViewCell(style: .value1, reuseIdentifier: "watchlistViewCell")
+        cell.imageView?.image = UIImage(systemName: "list.bullet.rectangle")
+        cell.textLabel?.text = "View list"
+        cell.accessoryType = .disclosureIndicator
+        return cell
+    }
+
+    private func watchlistAlertCell() -> UITableViewCell {
+        let cell = UITableViewCell(style: .subtitle, reuseIdentifier: "watchlistAlertCell")
+        cell.imageView?.image = UIImage(systemName: "bell.and.waves.left.and.right")
+        cell.textLabel?.text = "Watchlist alert"
+        cell.detailTextLabel?.text = "Flash, vibrate and notify when an imported plate is read"
+        cell.detailTextLabel?.textColor = .secondaryLabel
+        cell.detailTextLabel?.numberOfLines = 0
+        watchlistAlertSwitch.isEnabled = WatchlistStore.shared.count > 0
+        cell.accessoryView = watchlistAlertSwitch
+        cell.selectionStyle = .none
+        return cell
+    }
+
+    private func watchlistSoundCell() -> UITableViewCell {
+        let cell = UITableViewCell(style: .subtitle, reuseIdentifier: "watchlistSoundCell")
+        cell.imageView?.image = UIImage(systemName: "speaker.wave.2")
+        cell.textLabel?.text = "Alarm sound"
+        cell.detailTextLabel?.text = "Play the bundled alarm sound when a plate matches"
+        cell.detailTextLabel?.textColor = .secondaryLabel
+        cell.detailTextLabel?.numberOfLines = 0
+        watchlistSoundSwitch.isEnabled = WatchlistStore.shared.count > 0
+        cell.accessoryView = watchlistSoundSwitch
+        cell.selectionStyle = .none
+        return cell
+    }
+
     // MARK: - Actions
 
     private func showCountryPicker() {
@@ -306,6 +392,85 @@ final class SettingsViewController: UITableViewController {
             alert.addAction(UIAlertAction(title: "OK", style: .default))
             self.present(alert, animated: true)
         }
+    }
+
+    @objc private func watchlistAlertToggled() {
+        UserDefaults.standard.set(watchlistAlertSwitch.isOn, forKey: "watchlistAlertEnabled")
+    }
+
+    @objc private func watchlistSoundToggled() {
+        UserDefaults.standard.set(watchlistSoundSwitch.isOn, forKey: "watchlistSoundEnabled")
+    }
+
+    @objc private func watchlistDidChange() {
+        tableView.reloadData()
+    }
+
+    private func presentImportPicker() {
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.commaSeparatedText, .text])
+        picker.delegate = self
+        picker.allowsMultipleSelection = false
+        present(picker, animated: true)
+    }
+
+    private func handleImportedFile(at url: URL) {
+        // Security-scoped resource: required for files from outside the app sandbox.
+        let needsScope = url.startAccessingSecurityScopedResource()
+        defer { if needsScope { url.stopAccessingSecurityScopedResource() } }
+
+        guard let data = try? Data(contentsOf: url),
+              let text = String(data: data, encoding: .utf8) else {
+            presentAlert(title: "Couldn't read that file.", message: "Use a UTF-8 plain-text CSV.")
+            return
+        }
+        do {
+            let result = try WatchlistCSVParser.parse(text: text)
+            guard !result.entries.isEmpty else {
+                presentAlert(title: "No rows found.", message: nil)
+                return
+            }
+            promptMergeOrReplace(parsed: result)
+        } catch WatchlistCSVParser.ParseError.tooManyRows {
+            presentAlert(title: "Too many rows.", message: "The watchlist accepts up to \(WatchlistCSVParser.maxRows) entries.")
+        } catch {
+            presentAlert(title: "Import failed.", message: error.localizedDescription)
+        }
+    }
+
+    private func promptMergeOrReplace(parsed: WatchlistCSVParser.Result) {
+        let summary = "Imported \(parsed.entries.count) · Skipped \(parsed.skipped)"
+        if WatchlistStore.shared.count == 0 {
+            // Nothing to merge against — just commit.
+            WatchlistStore.shared.replace(with: parsed.entries)
+            presentAlert(title: summary, message: nil)
+            return
+        }
+        let alert = UIAlertController(title: summary, message: "Replace your existing list or merge into it?", preferredStyle: .actionSheet)
+        alert.addAction(UIAlertAction(title: "Replace existing", style: .destructive) { _ in
+            WatchlistStore.shared.replace(with: parsed.entries)
+        })
+        alert.addAction(UIAlertAction(title: "Merge", style: .default) { _ in
+            WatchlistStore.shared.merge(with: parsed.entries)
+        })
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        if let popover = alert.popoverPresentationController {
+            popover.sourceView = tableView
+            popover.sourceRect = tableView.rectForRow(at: IndexPath(row: 0, section: Section.watchlist.rawValue))
+        }
+        present(alert, animated: true)
+    }
+
+    private func presentAlert(title: String, message: String?) {
+        let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
+    }
+}
+
+extension SettingsViewController: UIDocumentPickerDelegate {
+    func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+        guard let url = urls.first else { return }
+        handleImportedFile(at: url)
     }
 }
 
