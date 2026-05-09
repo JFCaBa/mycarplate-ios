@@ -293,7 +293,11 @@ final class ScanViewController: UIViewController {
         overlay.onDoubleTap = { [weak self] in self?.exitSleepMode() }
 
         let window = UIWindow(windowScene: scene)
-        window.windowLevel = .alert + 1
+        // Just above the status-bar layer (1000) so we cover the nav bar and
+        // tab bar but stay below the notification banner (≥ .alert = 2000).
+        // The overlay VC hides the status bar via prefersStatusBarHidden, so
+        // we don't need to outrank that layer to look fully dark.
+        window.windowLevel = .statusBar + 1
         window.rootViewController = overlay
         window.makeKeyAndVisible()
         sleepWindow = window
@@ -342,6 +346,38 @@ final class ScanViewController: UIViewController {
     }
 }
 
+extension ScanViewController {
+    /// True when all non-whitespace characters in the candidate sit at
+    /// roughly the same height — a stand-in for "all from the same physical
+    /// plate". Vision will sometimes merge text from adjacent regions (EU
+    /// band, stickers, plate digits) into one observation if they happen to
+    /// horizontally align; the heights then disagree even though the
+    /// observation looks like a single line.
+    fileprivate static func charactersHaveConsistentHeight(in cand: VNRecognizedText) -> Bool {
+        let str = cand.string
+        guard str.count >= 4 else { return true }
+        var heights: [CGFloat] = []
+        var idx = str.startIndex
+        while idx < str.endIndex {
+            let next = str.index(after: idx)
+            if !str[idx].isWhitespace,
+               let rect = try? cand.boundingBox(for: idx..<next) {
+                let h = abs(rect.topLeft.y - rect.bottomLeft.y)
+                if h > 0 { heights.append(h) }
+            }
+            idx = next
+        }
+        guard heights.count >= 4,
+              let maxH = heights.max(),
+              let minH = heights.min(),
+              minH > 0 else { return true }
+        // Allow up to ~60% deviation between tallest and shortest character —
+        // accounts for descenders and OCR jitter while still catching mixed
+        // physical regions.
+        return (maxH / minH) < 1.6
+    }
+}
+
 extension ScanViewController: AVCaptureVideoDataOutputSampleBufferDelegate {
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
@@ -358,6 +394,11 @@ extension ScanViewController: AVCaptureVideoDataOutputSampleBufferDelegate {
                 guard obs.confidence >= threshold,
                       let cand = obs.topCandidates(1).first,
                       cand.confidence >= threshold else { return nil }
+                // Reject observations whose characters sit at clearly different
+                // heights — the OCR sometimes glues "L" + "E" (band/sticker)
+                // onto plate digits "7302" because they roughly align
+                // horizontally. Real plate text has uniform character height.
+                guard ScanViewController.charactersHaveConsistentHeight(in: cand) else { return nil }
                 return (cand.string, obs.boundingBox)
             }
             guard !observations.isEmpty else { return }
@@ -382,6 +423,11 @@ extension ScanViewController: AVCaptureVideoDataOutputSampleBufferDelegate {
                           abs(top.box.midX - bottom.box.midX) < widerWidth * 0.4 else { continue }
                     let widthRatio = min(top.box.width, bottom.box.width) / widerWidth
                     guard widthRatio > 0.4 else { continue }
+                    // Both lines on a real two-line plate are the same physical
+                    // height; mismatched line heights typically mean we'd be
+                    // gluing band/sticker text to the plate.
+                    let heightRatio = min(top.box.height, bottom.box.height) / max(top.box.height, bottom.box.height)
+                    guard heightRatio > 0.7 else { continue }
                     matches.append((top.text + bottom.text, top.box.union(bottom.box)))
                 }
             }
