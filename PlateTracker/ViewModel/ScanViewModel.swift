@@ -11,6 +11,10 @@ import CoreLocation
 final class ScanViewModel {
 
     private static let minSightingDistanceMeters: CLLocationDistance = 25
+    // Re-fire repeat-spot / watchlist alerts only when the same plate appears
+    // either ≥ minSightingDistanceMeters away OR after this much time. Prevents
+    // notification spam when staring at the same parked car.
+    private static let minSightingTimeIntervalSeconds: TimeInterval = 300
 
     @Published private(set) var scanRecords: [PlateScanRecord] = []
     @Published private(set) var detectedPlate: String?
@@ -135,7 +139,24 @@ final class ScanViewModel {
         // Show detected plate immediately.
         detectedPlate = plate
 
-        if WatchlistStore.shared.contains(plate: plate) {
+        let existingIdx = scanRecords.firstIndex(where: { $0.plate == plate })
+        // A sighting is "fresh" (notification-worthy) when either the plate is
+        // new, enough time has passed since its last sighting, or the device
+        // has moved beyond the distance threshold. Without GPS, we can only
+        // gate on time — so a parked-car re-read won't machinegun banners.
+        let isFreshSighting: Bool = {
+            guard let idx = existingIdx,
+                  let last = scanRecords[idx].sightings.last else { return true }
+            if Date().timeIntervalSince(last.date) >= Self.minSightingTimeIntervalSeconds {
+                return true
+            }
+            guard let lastLoc = last.location, let newLoc = location else { return false }
+            let lastCL = CLLocation(latitude: lastLoc.latitude, longitude: lastLoc.longitude)
+            let newCL = CLLocation(latitude: newLoc.latitude, longitude: newLoc.longitude)
+            return lastCL.distance(from: newCL) >= Self.minSightingDistanceMeters
+        }()
+
+        if isFreshSighting, WatchlistStore.shared.contains(plate: plate) {
             watchlistMatch = WatchlistMatch(
                 plate: plate,
                 name: WatchlistStore.shared.name(for: plate),
@@ -143,10 +164,9 @@ final class ScanViewModel {
             )
         }
 
-        // Existing plate — append a new sighting, or just refresh the last one
-        // if we're within Self.minSightingDistanceMeters of it (stationary device
-        // or same-car re-scan). Avoids piling up near-duplicate sightings.
-        if let index = scanRecords.firstIndex(where: { $0.plate == plate }) {
+        // Existing plate — refresh the last sighting in place when not fresh,
+        // otherwise append a new sighting and signal a repeat-spot.
+        if let index = existingIdx {
             // No vehicle data and lookup was never attempted — re-enqueue (handles stale nil records).
             if scanRecords[index].vehicleData == nil,
                scanRecords[index].lastLookupAttempt == nil,
@@ -164,23 +184,18 @@ final class ScanViewModel {
                 _ = lookupQueue.enqueue(item)
             }
 
-            if let last = scanRecords[index].sightings.last,
-               let lastLoc = last.location,
-               let newLoc = location {
-                let lastCL = CLLocation(latitude: lastLoc.latitude, longitude: lastLoc.longitude)
-                let newCL = CLLocation(latitude: newLoc.latitude, longitude: newLoc.longitude)
-                if lastCL.distance(from: newCL) < Self.minSightingDistanceMeters {
-                    let refreshed = Sighting(
-                        location: last.location,
-                        date: Date(),
-                        photoFileName: last.photoFileName
-                    )
-                    let lastIdx = scanRecords[index].sightings.count - 1
-                    scanRecords[index].sightings[lastIdx] = refreshed
-                    StorageService.shared.saveRecords(scanRecords)
-                    return
-                }
+            if !isFreshSighting, let last = scanRecords[index].sightings.last {
+                let refreshed = Sighting(
+                    location: last.location,
+                    date: Date(),
+                    photoFileName: last.photoFileName
+                )
+                let lastIdx = scanRecords[index].sightings.count - 1
+                scanRecords[index].sightings[lastIdx] = refreshed
+                StorageService.shared.saveRecords(scanRecords)
+                return
             }
+
             let photoFileName = saveFrameIfNeeded(capturedFrame, plate: plate)
             let sighting = Sighting(
                 location: codableLocation,
@@ -189,8 +204,6 @@ final class ScanViewModel {
             )
             scanRecords[index].sightings.append(sighting)
             StorageService.shared.saveRecords(scanRecords)
-            // Same plate, new location — surface a one-shot signal so the
-            // UI can fire the repeat-spot alert if the user enabled it.
             repeatSighting = RepeatSighting(plate: plate, at: Date())
             return
         }
