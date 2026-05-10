@@ -395,7 +395,21 @@ final class SettingsViewController: UITableViewController {
     }
 
     @objc private func watchlistAlertToggled() {
-        UserDefaults.standard.set(watchlistAlertSwitch.isOn, forKey: "watchlistAlertEnabled")
+        let isOn = watchlistAlertSwitch.isOn
+        UserDefaults.standard.set(isOn, forKey: "watchlistAlertEnabled")
+        guard isOn else { return }
+        NotificationService.shared.requestAuthorizationIfNeeded { [weak self] granted in
+            guard let self = self, !granted else { return }
+            UserDefaults.standard.set(false, forKey: "watchlistAlertEnabled")
+            self.watchlistAlertSwitch.setOn(false, animated: true)
+            let alert = UIAlertController(
+                title: "Notifications disabled",
+                message: "Enable notifications for PlateTracker in Settings to receive watchlist alerts.",
+                preferredStyle: .alert
+            )
+            alert.addAction(UIAlertAction(title: "OK", style: .default))
+            self.present(alert, animated: true)
+        }
     }
 
     @objc private func watchlistSoundToggled() {

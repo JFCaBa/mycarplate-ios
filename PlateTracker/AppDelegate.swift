@@ -21,6 +21,17 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         BackgroundVehicleFetcher.shared.bootstrap()
         // Surface repeat-spot banners even while the app is in the foreground.
         UNUserNotificationCenter.current().delegate = self
+        // watchlistAlertEnabled defaults to true, but its toggle never asked
+        // for permission. Prompt on launch when any notification feature is on
+        // so banners actually surface in foreground and background.
+        let defaults = UserDefaults.standard
+        let watchlistDefault = defaults.object(forKey: "watchlistAlertEnabled") == nil
+            ? true
+            : defaults.bool(forKey: "watchlistAlertEnabled")
+        let repeatOn = defaults.bool(forKey: "repeatSpotNotificationEnabled")
+        if watchlistDefault || repeatOn {
+            NotificationService.shared.requestAuthorizationIfNeeded()
+        }
         return true
     }
 
