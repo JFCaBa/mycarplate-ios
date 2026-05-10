@@ -75,8 +75,15 @@ final class WatchlistListViewController: UITableViewController {
         let entry = entries[indexPath.row]
         cell.textLabel?.text = entry.name.isEmpty ? "—" : entry.name
         cell.detailTextLabel?.text = entry.plate
-        cell.selectionStyle = .none
+        cell.accessoryType = .disclosureIndicator
         return cell
+    }
+
+    override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        tableView.deselectRow(at: indexPath, animated: true)
+        guard !entries.isEmpty, indexPath.row < entries.count else { return }
+        let detailVC = WatchlistEntryDetailViewController(entry: entries[indexPath.row])
+        navigationController?.pushViewController(detailVC, animated: true)
     }
 
     override func tableView(_ tableView: UITableView, canEditRowAt indexPath: IndexPath) -> Bool {
