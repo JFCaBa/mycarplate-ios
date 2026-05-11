@@ -7,6 +7,8 @@ import Foundation
 
 enum PlateCountry: String, CaseIterable {
     case spain = "ES"
+    case portugal = "PT"
+    case france = "FR"
     case uk = "UK"
     case netherlands = "NL"
     case norway = "NO"
@@ -92,6 +94,11 @@ final class PlateValidator {
     // E-trailer `^E\d{4}[A-Z]$` (unreachable behind the prefix guard) and the
     // catch-all `^[A-Z]{1,2}\d{4}[A-Z]{3}$` (matches non-format reads like
     // X0662CRV; legitimate prefixed reads are recovered by cleanEUBandPrefix).
+    //
+    // Detection priority in allCases: ES → PT → FR → UK → NL → NO.
+    // PT is listed before NL/NO because several PT formats overlap with NL
+    // sidecodes and the shorter NO prefix pattern (see countryDetector.ts for
+    // the full overlap analysis). FR before UK: no overlap, ordering is cosmetic.
     private static let patterns: [PlateCountry: [String]] = [
         .spain: [
             #"^\d{4}[BCDFGHJKLMNPRSTVWXYZ]{3}$"#,
@@ -104,6 +111,15 @@ final class PlateValidator {
             // Bound to 3-4 letters: 2-letter forms (e.g. LE7302) are
             // overwhelmingly OCR noise rather than real pre-1971 plates.
             #"^[A-Z]{3,4}\d{4}$"#,
+        ],
+        .portugal: [
+            #"^[A-Z]{2}\d{2}[A-Z]{2}$"#,   // 2020-present: AA-00-AA
+            #"^\d{2}[A-Z]{2}\d{2}$"#,        // 2005-2020:    00-AA-00
+            #"^\d{4}[A-Z]{2}$"#,             // 1992-2005:    00-00-AA
+            #"^[A-Z]{2}\d{4}$"#,             // 1937-1992:    AA-00-00
+        ],
+        .france: [
+            #"^[A-Z]{2}\d{3}[A-Z]{2}$"#,    // SIV (2009+): AB123CD after sanitize
         ],
         .netherlands: [
             // With dashes (sidecodes 1-12)

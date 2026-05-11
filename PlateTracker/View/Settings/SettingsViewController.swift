@@ -42,6 +42,8 @@ final class SettingsViewController: UITableViewController {
 
     private let countries: [(PlateCountry, String)] = [
         (.spain, "🇪🇸 Spain"),
+        (.portugal, "🇵🇹 Portugal"),
+        (.france, "🇫🇷 France"),
         (.uk, "🇬🇧 United Kingdom"),
         (.netherlands, "🇳🇱 Netherlands"),
         (.norway, "🇳🇴 Norway"),
